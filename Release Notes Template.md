@@ -1,0 +1,17 @@
+# v1.0.0 - First Dedicated NTP Installer Release
+
+## What This Is
+Standalone Windows installer package for NTP guided setup, separated from analysis tools.
+
+## Download
+- `install_ntp_timing_bootstrap.cmd` (recommended for all users)
+
+## Install Steps
+1. Download `install_ntp_timing_bootstrap.cmd`.
+2. Double-click.
+3. Click Yes on Administrator prompt.
+4. Follow guided installer prompts.
+
+## Notes
+- This release is focused on installer usability for non-technical users.
+- Legacy/testing script is still included under `scripts/legacy/`.
