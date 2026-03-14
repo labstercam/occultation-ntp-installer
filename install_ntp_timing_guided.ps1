@@ -1079,6 +1079,15 @@ function Select-ServersFromListInteractive {
         }
 
         $parts = @($raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+        if ($parts.Count -eq 1 -and $parts[0] -eq "0") {
+            return ,@()
+        }
+
+        if ($parts -contains "0") {
+            Write-WarnMsg "Enter 0 by itself for no selection, or use server numbers such as 1,2."
+            continue
+        }
+
         if ($parts.Count -gt $MaxCount) {
             Write-WarnMsg ("Please select up to {0} servers." -f $MaxCount)
             continue
@@ -1368,7 +1377,12 @@ function Resolve-AuServersInteractive {
     }
 
     if ($selected.Count -lt 5) {
-        Write-WarnMsg "Not enough numbered AU pool servers were available to reach 5 unique entries."
+        if ($selected.Count -eq $poolNumbered.Count -and $poolNumbered.Count -eq 4) {
+            Write-Info "Using the 4 standard numbered AU pool servers. Add NMI or University servers if you want a fifth unique source."
+        }
+        else {
+            Write-WarnMsg "Not enough numbered AU pool servers were available to reach 5 unique entries."
+        }
     }
 
     Write-Step "AU server selection summary"
