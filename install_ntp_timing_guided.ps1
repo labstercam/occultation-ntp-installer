@@ -1451,6 +1451,145 @@ function Remove-GpsClockLines {
     return @($cleaned)
 }
 
+function Get-GpsClockEntries {
+    param([string[]]$Lines)
+
+    $entries = @()
+    $headerComment = ""
+
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        $line = $Lines[$i]
+
+        if ($line -match '^\s*#\s*GPS serial source configured by install_ntp_timing_guided\.ps1\s*$') {
+            $headerComment = $line
+            continue
+        }
+
+        # Only parse active (uncommented) server 127.127.20.x lines
+        if ($line -match '^\s*server\s+127\.127\.20\.(\d+)') {
+            $comPort = [int]$matches[1]
+            $serverLine = $line.Trim()
+            $fudgeLine = ""
+
+            for ($j = $i + 1; $j -lt [Math]::Min($i + 5, $Lines.Count); $j++) {
+                if ($Lines[$j] -match ('^\s*fudge\s+127\.127\.20\.' + $comPort + '\b')) {
+                    $fudgeLine = $Lines[$j].Trim()
+                    $i = $j
+                    break
+                }
+            }
+
+            $isPPS = ($fudgeLine -match '\bflag1\s+1\b')
+
+            $entries += [PSCustomObject]@{
+                ComPort    = $comPort
+                IsPPS      = $isPPS
+                Header     = $headerComment
+                ServerLine = $serverLine
+                FudgeLine  = $fudgeLine
+            }
+            $headerComment = ""
+            continue
+        }
+
+        if ($headerComment -ne "" -and $line -match '\S') {
+            $headerComment = ""
+        }
+    }
+
+    return $entries
+}
+
+function Select-GpsEntriesToKeep {
+    param([PSCustomObject[]]$Entries)
+
+    Write-Host ""
+    Write-Host "GPS/PPS entries after this update:" -ForegroundColor Cyan
+    Write-Host ""
+
+    for ($i = 0; $i -lt $Entries.Count; $i++) {
+        $e = $Entries[$i]
+        $modeStr = if ($e.IsPPS) { "PPS+NMEA" } else { "NMEA only" }
+        Write-Host ("  [{0}] COM{1}  ({2})" -f ($i + 1), $e.ComPort, $modeStr) -ForegroundColor White
+        Write-Host ("       {0}" -f $e.ServerLine) -ForegroundColor DarkGray
+        if (-not [string]::IsNullOrWhiteSpace($e.FudgeLine)) {
+            Write-Host ("       {0}" -f $e.FudgeLine) -ForegroundColor DarkGray
+        }
+        Write-Host ""
+    }
+
+    $dupCom = @($Entries | Group-Object -Property ComPort | Where-Object { $_.Count -gt 1 })
+    foreach ($dup in $dupCom) {
+        Write-WarnMsg ("Conflict: COM{0} appears {1} times. Only one entry per COM port is valid." -f $dup.Name, $dup.Count)
+    }
+
+    $ppsCount = @($Entries | Where-Object { $_.IsPPS }).Count
+    if ($ppsCount -gt 1) {
+        Write-WarnMsg ("Multiple PPS entries detected ({0}). Only one PPS GPS receiver can be active at a time." -f $ppsCount)
+    }
+
+    while ($true) {
+        Write-Host "Enter numbers to keep (e.g. 1,2), 'all', or 'none':" -ForegroundColor Cyan
+        $reply = (Read-Host).Trim()
+
+        if ($reply -ieq 'all') {
+            $selected = @($Entries)
+        }
+        elseif ($reply -ieq 'none') {
+            $selected = @()
+        }
+        else {
+            $parts = @($reply -split '[,\s]+' | Where-Object { $_ -match '^\d+$' })
+            if ($parts.Count -eq 0) {
+                Write-WarnMsg "Enter numbers like '1,2', 'all', or 'none'."
+                continue
+            }
+            $indices = @($parts | ForEach-Object { [int]$_ })
+            $invalid = @($indices | Where-Object { $_ -lt 1 -or $_ -gt $Entries.Count })
+            if ($invalid.Count -gt 0) {
+                Write-WarnMsg ("Invalid numbers: {0}. Valid range is 1 to {1}." -f ($invalid -join ', '), $Entries.Count)
+                continue
+            }
+            $selected = @($indices | ForEach-Object { $Entries[$_ - 1] })
+        }
+
+        $dupSel = @($selected | Group-Object -Property ComPort | Where-Object { $_.Count -gt 1 })
+        if ($dupSel.Count -gt 0) {
+            Write-WarnMsg ("Duplicate COM port in selection: COM{0}. Select only one entry per COM port." -f (($dupSel | ForEach-Object { $_.Name }) -join ', '))
+            continue
+        }
+
+        $ppsSel = @($selected | Where-Object { $_.IsPPS })
+        if ($ppsSel.Count -gt 1) {
+            Write-WarnMsg "Multiple PPS entries selected. Only one PPS GPS receiver can be active at a time. Remove extra PPS entries."
+            continue
+        }
+
+        return $selected
+    }
+}
+
+function Write-GpsEntriesToConf {
+    param(
+        [string]$NtpConfPath,
+        [PSCustomObject[]]$Entries
+    )
+
+    $lines = @(Get-Content -LiteralPath $NtpConfPath)
+    $cleaned = @(Remove-GpsClockLines -Lines $lines)
+
+    foreach ($e in $Entries) {
+        $cleaned += ""
+        $cleaned += "# GPS serial source configured by install_ntp_timing_guided.ps1"
+        $cleaned += $e.ServerLine
+        if (-not [string]::IsNullOrWhiteSpace($e.FudgeLine)) {
+            $cleaned += $e.FudgeLine
+        }
+    }
+
+    Set-Content -LiteralPath $NtpConfPath -Value $cleaned -Encoding ASCII
+}
+
 function Update-GpsLines {
     param(
         [string]$NtpConfPath,
@@ -1463,46 +1602,42 @@ function Update-GpsLines {
         throw "ntp.conf not found at $NtpConfPath. Complete the NTP setup step first."
     }
 
-    $lines = @(Get-Content -LiteralPath $NtpConfPath)
-    $filtered = Remove-GpsClockLines -Lines $lines
-
-    $gpsBlock = @(
-        "",
-        "# GPS serial source configured by install_ntp_timing_guided.ps1"
-    )
-
     if ($NmeaOnly) {
-        $gpsBlock += "server 127.127.20.$ComPort mode $GpsMode minpoll 4 maxpoll 4 iburst"
-        $gpsBlock += "fudge 127.127.20.$ComPort flag1 0 flag2 0 refid GPS"
+        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 4 maxpoll 4 iburst"
+        $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 0 flag2 0 refid GPS"
     }
     else {
-        $gpsBlock += "server 127.127.20.$ComPort mode $GpsMode minpoll 4 maxpoll 4 prefer"
-        $gpsBlock += "fudge 127.127.20.$ComPort flag1 1 flag2 1 refid GPS"
+        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 4 maxpoll 4 prefer"
+        $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 1 flag2 1 refid GPS"
     }
 
-    $updated = @($filtered + $gpsBlock)
-    Set-Content -LiteralPath $NtpConfPath -Value $updated -Encoding ASCII
+    $newEntry = [PSCustomObject]@{
+        ComPort    = $ComPort
+        IsPPS      = (-not $NmeaOnly)
+        Header     = "# GPS serial source configured by install_ntp_timing_guided.ps1"
+        ServerLine = $newServerLine
+        FudgeLine  = $newFudgeLine
+    }
 
-    if ($NmeaOnly) {
-        Write-Ok "Configured NMEA-only GPS lines for COM$ComPort in $NtpConfPath"
+    # Get existing entries excluding any for this COM port (new entry replaces them)
+    $allLines = @(Get-Content -LiteralPath $NtpConfPath)
+    $otherEntries = @(Get-GpsClockEntries -Lines $allLines | Where-Object { $_.ComPort -ne $ComPort })
+
+    # Merge: other existing entries + new entry for this COM port
+    $allEntries = @($otherEntries) + @($newEntry)
+
+    if ($allEntries.Count -gt 1) {
+        $modeStr = if ($NmeaOnly) { "NMEA-only" } else { "PPS+NMEA" }
+        Write-Info ("New COM{0} ({1}) entry ready. Review all GPS entries below." -f $ComPort, $modeStr)
+        $selected = @(Select-GpsEntriesToKeep -Entries $allEntries)
     }
     else {
-        Write-Ok "Configured PPS+NMEA GPS lines for COM$ComPort in $NtpConfPath"
-    }
-}
-
-function Disable-GpsLines {
-    param([string]$NtpConfPath)
-
-    if (-not (Test-Path -LiteralPath $NtpConfPath)) {
-        return
+        $selected = $allEntries
     }
 
-    $lines = @(Get-Content -LiteralPath $NtpConfPath)
-    $updated = Remove-GpsClockLines -Lines $lines
-
-    Set-Content -LiteralPath $NtpConfPath -Value $updated -Encoding ASCII
-    Write-Info "GPS local-clock lines were removed because GPS was not selected in this run."
+    Write-GpsEntriesToConf -NtpConfPath $NtpConfPath -Entries $selected
+    $modeStr = if ($NmeaOnly) { "NMEA-only" } else { "PPS+NMEA" }
+    Write-Ok ("GPS entries updated in {0}: {1} kept ({2})" -f $NtpConfPath, @($selected).Count, $modeStr)
 }
 
 function Set-PpsProviderRegistryValue {
@@ -1616,6 +1751,7 @@ $logPath = Join-Path $logDir ("guided_ntp_installer_{0}.log" -f (Get-Date -Forma
 
 $gpsConfigured = $false
 $gpsNmeaOnly = $false
+$gpsApplied = $false
 $selectedComPort = 1
 $selectedGpsMode = 18
 $selectedCountry = "NZ"
@@ -1711,6 +1847,8 @@ try {
             ("Advanced detail: PPS mode updates {0}\\PPSProviders automatically" -f $ppsRegistryPath)
         )) {
 
+        Write-WarnMsg "Installing GPS receivers has not been fully tested yet. You may need to manually alter the ntp.conf file and change some parameters to get it working."
+
         Write-Host "Select GPS mode:" -ForegroundColor Cyan
         Write-Host "  1) GPS PPS + NMEA (recommended when PPS available)"
         Write-Host "  2) GPS NMEA only (no PPS signal)"
@@ -1750,6 +1888,7 @@ try {
         }
         else {
             Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
+            $gpsApplied = $true
             $restartRecommended = $true
         }
 
@@ -1790,17 +1929,15 @@ try {
 
         $servers = Resolve-ServersForCountry -CountryCode $selectedCountry -ConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath -PoolZonesPath $poolZonesPath -OtherCc $selectedOtherCode
         Update-NtpManagedSectionsFromTemplate -TemplatePath $templatePath -Servers $servers -Port $selectedComPort -Mode $selectedGpsMode -StatsFolder $statsDir -OutputPath $ntpConfPath
+
+        if ($gpsConfigured -and -not $gpsApplied) {
+            Write-Info "Applying deferred GPS configuration to ntp.conf."
+            Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
+            $gpsApplied = $true
+        }
+
         Show-InstalledServerList -Servers $servers -Country $selectedCountry -OtherCode $selectedOtherCode
         $restartRecommended = $true
-
-        if (-not $gpsConfigured) {
-            Disable-GpsLines -NtpConfPath $ntpConfPath
-            $restartRecommended = $true
-        }
-        elseif ($gpsNmeaOnly) {
-            Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$true
-            $restartRecommended = $true
-        }
 
         Show-CountryInstallSummary -Country $selectedCountry -OtherCode $selectedOtherCode -CountryConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath
     }
