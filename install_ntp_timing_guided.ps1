@@ -401,7 +401,7 @@ function Check-SupportFileAvailability {
 function Install-Exe {
     param(
         [string]$InstallerPath,
-        [string]$Arguments,
+        [string[]]$Arguments,
         [string]$Label
     )
 
@@ -415,11 +415,14 @@ function Install-Exe {
         Wait     = $true
     }
 
-    if ([string]::IsNullOrWhiteSpace($Arguments)) {
+    $argList = @($Arguments | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+    if ($argList.Count -eq 0) {
         Write-WarnMsg "$Label silent arguments are empty; starting installer without arguments (interactive mode)."
     }
     else {
-        $startArgs.ArgumentList = $Arguments
+        $startArgs.ArgumentList = $argList
+        Write-Info ("{0} arguments: {1}" -f $Label, ($argList -join " "))
     }
 
     Write-Info "Starting installer: $Label"
@@ -2467,7 +2470,9 @@ try {
             $selectedUpgradeMode = Read-MeinbergAutomaticUpgradeMode -InstallRoot $installRoot -NtpConfPath $ntpConfPath
             $useConfigFileInAutomaticMode = Read-MeinbergAutomaticUseConfigChoice -UpgradeMode $selectedUpgradeMode
             $autoInstall = Prepare-MeinbergAutomaticInstallFiles -IniTemplatePath $meinbergAutoIniTemplatePath -TempDir $downloadDir -InstallRoot $installRoot -UpgradeMode $selectedUpgradeMode -ApplyUseConfigFile:$useConfigFileInAutomaticMode
-            $automaticArgs = "/USE_FILE=`"$($autoInstall.IniPath)`""
+            # Keep /USE_FILE unquoted to avoid passing embedded quote characters
+            # to the NSIS option parser used by the Meinberg installer.
+            $automaticArgs = @("/USE_FILE=$($autoInstall.IniPath)")
             Write-Host ""
             Write-Host "Automatic install settings:" -ForegroundColor Cyan
             Write-Host ("  InstallDir:   {0}" -f $installRoot)
@@ -2490,7 +2495,33 @@ try {
                 Write-Info "Automatic mode will not import a placeholder ntp.conf in this run."
             }
             Write-Info ("Automatic installer log: {0}" -f $autoInstall.InstallerLogPath)
-            Install-Exe -InstallerPath $meinbergInstallerPath -Arguments $automaticArgs -Label "Meinberg NTP"
+            try {
+                Install-Exe -InstallerPath $meinbergInstallerPath -Arguments $automaticArgs -Label "Meinberg NTP"
+            }
+            catch {
+                Write-WarnMsg ("Automatic install failed: {0}" -f $_.Exception.Message)
+                Write-WarnMsg ("Generated automatic INI: {0}" -f $autoInstall.IniPath)
+                Write-WarnMsg ("Installer log path: {0}" -f $autoInstall.InstallerLogPath)
+
+                if (Test-Path -LiteralPath $autoInstall.InstallerLogPath) {
+                    Write-Info "Last lines from Meinberg automatic installer log:"
+                    Get-Content -LiteralPath $autoInstall.InstallerLogPath -Tail 25 | ForEach-Object {
+                        Write-Host ("  {0}" -f $_)
+                    }
+                }
+                else {
+                    Write-WarnMsg "Installer log file was not created by Meinberg installer."
+                }
+
+                if (Read-YesNo -Prompt "Retry Step 1 now using guided install mode?" -DefaultYes $true) {
+                    Write-WarnMsg "Falling back to guided install mode for Step 1."
+                    Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added later in Step 4."
+                    Install-Exe -InstallerPath $meinbergInstallerPath -Arguments @() -Label "Meinberg NTP"
+                }
+                else {
+                    throw
+                }
+            }
 
             # Automatic mode: always apply recommended standard-user access layout.
             $layout = Configure-StandaloneUserNtpAccess -InstallRoot $installRoot -CurrentNtpConfPath $ntpConfPath
@@ -2505,7 +2536,7 @@ try {
             }
         }
         else {
-            Install-Exe -InstallerPath $meinbergInstallerPath -Arguments $meinbergInstallerArgs -Label "Meinberg NTP"
+            Install-Exe -InstallerPath $meinbergInstallerPath -Arguments @($meinbergInstallerArgs) -Label "Meinberg NTP"
 
             Write-WarnMsg "Recommended: move ntp.conf/logs to ProgramData and grant standard-user rights for scripts + NTP service control."
             if (Read-YesNo -Prompt "Apply recommended standard-user access changes now?" -DefaultYes $true) {
@@ -2538,7 +2569,7 @@ try {
 
         $monitorInstallerPath = Join-Path $downloadDir "ntp_monitor_installer.exe"
         Invoke-InstallerDownload -Url $ntpMonitorInstallerUrl -OutputPath $monitorInstallerPath -Label "NTP Time Server Monitor"
-        Install-Exe -InstallerPath $monitorInstallerPath -Arguments $ntpMonitorInstallerArgs -Label "NTP Time Server Monitor"
+        Install-Exe -InstallerPath $monitorInstallerPath -Arguments @($ntpMonitorInstallerArgs) -Label "NTP Time Server Monitor"
     }
 
     if (Confirm-Step -Title "Step 3: Optional GPS/PPS source setup" -Details @(
