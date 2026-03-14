@@ -327,6 +327,77 @@ function Invoke-InstallerDownload {
     Write-Ok "Downloaded $Label to $OutputPath"
 }
 
+function Ensure-FileAvailableWithRemote {
+    param(
+        [string]$LocalPath,
+        [string]$RemoteUrl,
+        [string]$Label
+    )
+
+    if (Test-Path -LiteralPath $LocalPath) {
+        return $true
+    }
+
+    if ($script:RemoteDownloadsDisabled) {
+        Show-RemoteOverrideNotice
+        Write-WarnMsg ("{0} not found locally and remote downloads are disabled: {1}" -f $Label, $LocalPath)
+        return $false
+    }
+
+    if ([string]::IsNullOrWhiteSpace($RemoteUrl)) {
+        Write-WarnMsg ("{0} not found locally and no remote URL is configured: {1}" -f $Label, $LocalPath)
+        return $false
+    }
+
+    try {
+        $dir = Split-Path -Parent $LocalPath
+        if (-not [string]::IsNullOrWhiteSpace($dir) -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+
+        Write-Info ("Downloading missing {0} from GitHub..." -f $Label)
+        Invoke-WebRequest -Uri $RemoteUrl -OutFile $LocalPath -UseBasicParsing -TimeoutSec 20
+        Write-Ok ("Downloaded {0}: {1}" -f $Label, $LocalPath)
+        return $true
+    }
+    catch {
+        Write-WarnMsg ("Could not download {0}: {1}" -f $Label, $_.Exception.Message)
+        return $false
+    }
+}
+
+function Check-SupportFileAvailability {
+    param(
+        [string]$TemplatePath,
+        [string]$CountryConfigPath,
+        [string]$NationalUtcPath,
+        [string]$PoolZonesPath,
+        [string]$AutoIniTemplatePath,
+        [string]$TemplateRemoteUrl,
+        [string]$CountryConfigRemoteUrl,
+        [string]$NationalUtcRemoteUrl,
+        [string]$PoolZonesRemoteUrl,
+        [string]$AutoIniTemplateRemoteUrl
+    )
+
+    Write-Info "Checking local support file availability..."
+
+    $checks = @(
+        [PSCustomObject]@{ Label = "ntp.conf template"; Local = $TemplatePath; Remote = $TemplateRemoteUrl },
+        [PSCustomObject]@{ Label = "country server config"; Local = $CountryConfigPath; Remote = $CountryConfigRemoteUrl },
+        [PSCustomObject]@{ Label = "national UTC/NTP inventory"; Local = $NationalUtcPath; Remote = $NationalUtcRemoteUrl },
+        [PSCustomObject]@{ Label = "NTP pool zones"; Local = $PoolZonesPath; Remote = $PoolZonesRemoteUrl },
+        [PSCustomObject]@{ Label = "automatic install template"; Local = $AutoIniTemplatePath; Remote = $AutoIniTemplateRemoteUrl }
+    )
+
+    foreach ($c in $checks) {
+        $ok = Ensure-FileAvailableWithRemote -LocalPath $c.Local -RemoteUrl $c.Remote -Label $c.Label
+        if (-not $ok) {
+            Write-WarnMsg ("{0} is currently unavailable. Related steps may require internet access or local files." -f $c.Label)
+        }
+    }
+}
+
 function Install-Exe {
     param(
         [string]$InstallerPath,
@@ -2271,11 +2342,13 @@ $CountryConfigRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultat
 $PoolZonesRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/resources/ntp_pool_zones.json"
 $NationalUtcRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/resources/national_utc_ntp_servers.json"
 $TemplateRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/config/ntp.conf.template"
+$AutoInstallTemplateRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/config/install.auto.template.ini"
 
 $script:CountryConfigRemoteUrl = $CountryConfigRemoteUrl
 $script:PoolZonesRemoteUrl = $PoolZonesRemoteUrl
 $script:NationalUtcRemoteUrl = $NationalUtcRemoteUrl
 $script:TemplateRemoteUrl = $TemplateRemoteUrl
+$script:AutoInstallTemplateRemoteUrl = $AutoInstallTemplateRemoteUrl
 
 $meinbergInstallerUrl = "https://www.meinbergglobal.com/download/ntp/windows/ntp-4.2.8p18a2-win32-setup.exe"
 $meinbergInstallerSha256 = "f933bc66ed987eb436f8345f6331de4ffad24e6ce5e5a6f5ce98109b7b29f164"
@@ -2321,6 +2394,18 @@ catch {
 
 try {
     Assert-Admin
+
+    Check-SupportFileAvailability `
+        -TemplatePath $templatePath `
+        -CountryConfigPath $countryConfigPath `
+        -NationalUtcPath $nationalUtcPath `
+        -PoolZonesPath $poolZonesPath `
+        -AutoIniTemplatePath $meinbergAutoIniTemplatePath `
+        -TemplateRemoteUrl $TemplateRemoteUrl `
+        -CountryConfigRemoteUrl $CountryConfigRemoteUrl `
+        -NationalUtcRemoteUrl $NationalUtcRemoteUrl `
+        -PoolZonesRemoteUrl $PoolZonesRemoteUrl `
+        -AutoIniTemplateRemoteUrl $AutoInstallTemplateRemoteUrl
 
     if ($script:RemoteDownloadsDisabled) {
         Write-Host "" 
