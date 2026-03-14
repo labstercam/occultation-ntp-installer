@@ -7,6 +7,8 @@ Recommended entrypoint for most users:
 
 ## Guided Installer (recommended)
 
+Recommended for most users because the CMD launcher bootstraps the latest guided PowerShell installer from GitHub and can fall back to an already-downloaded local copy when internet access is unavailable.
+
 Beginner launch (double-click):
 
 ```cmd
@@ -40,6 +42,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 - Optional GPS/PPS setup with COM auto-detection or manual COM entry.
 - Country-based server setup using curated profiles and fallback logic.
 - Marker-based managed updates to `ntp.conf` while preserving unrelated config.
+- Static IP guidance during server setup, including suggested values and Windows 10/11 entry steps.
 - Restart prompt when configuration changes are detected.
 - Transcript logging to repository `logs/` when run from a local clone.
 
@@ -56,7 +59,17 @@ Resource notes:
 - `ntp-country-servers.json` drives generated `ntp.conf` server lines.
 - `ntp_pool_zones.json` is used for `-Country Other` country-to-region mapping.
 - `national_utc_ntp_servers.json` is consulted for `-Country Other` when no curated country profile exists.
-- The scripts attempt GitHub raw URLs first, then fall back to local files.
+- During a normal online run, the guided installer attempts GitHub raw URLs first and caches resource files locally.
+- If the CMD launcher cannot reach GitHub and you choose to continue with the local installer, the guided installer switches to local-only mode for the rest of that run.
+- In local-only mode, cached local resources are used when available and missing required files are reported clearly.
+
+## Launcher behavior
+
+- `install_ntp_timing_guided.cmd` always requests elevation first.
+- It then attempts to download the latest `install_ntp_timing_guided.ps1` from GitHub.
+- If the download fails and no local copy exists, the launcher exits with an error.
+- If the download fails and a local copy exists, the launcher prompts once to continue with the local installer.
+- When you continue with the local installer, the PowerShell script shows an `[OFFLINE MODE]` banner and does not attempt further remote downloads during that run.
 
 ## Legacy/testing script
 

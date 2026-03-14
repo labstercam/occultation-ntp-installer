@@ -9,12 +9,14 @@ This repository includes a beginner CMD launcher, a guided PowerShell installer,
 1. Download `install_ntp_timing_guided.cmd` from the latest release.
 2. Double-click it.
 3. Accept Administrator prompt (UAC).
-4. Follow the guided installer prompts.
+4. The launcher downloads the latest `install_ntp_timing_guided.ps1` from GitHub.
+5. If GitHub is unavailable but a previously downloaded local copy exists, you can choose to continue in offline mode.
+6. Follow the guided installer prompts.
 
 ## Repository Files
 
 - `install_ntp_timing_guided.cmd`:
-  Beginner entry point (double-click, requests elevation automatically).
+  Beginner entry point (double-click, requests elevation automatically, refreshes the main installer from GitHub, and offers offline fallback when GitHub is unavailable).
 - `install_ntp_timing_guided.ps1`:
   Main guided installer logic.
 - `scripts/legacy/setup_ntp_timing.ps1`:
@@ -38,5 +40,7 @@ This repository includes a beginner CMD launcher, a guided PowerShell installer,
 ## Basic Troubleshooting
 
 - If Windows blocks launch, right-click the file -> Properties -> Unblock (if shown), then run as Administrator.
+- If internet access is unavailable, the CMD launcher can continue with a previously downloaded local installer script after confirmation.
+- Resource files used during country setup are fetched from GitHub when available and cached locally for later offline reruns.
 - If PowerShell policy is restrictive, launch using:
   `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_ntp_timing_guided.ps1`
