@@ -731,7 +731,7 @@ function Grant-UsersNtpFileAccess {
         if (-not (Test-Path -LiteralPath $target)) {
             New-Item -ItemType Directory -Path $target -Force | Out-Null
         }
-        $out = @(& icacls.exe $target /grant "$usersSid:(OI)(CI)(M)" /T /C 2>&1)
+        $out = @(& icacls.exe $target /grant "${usersSid}:(OI)(CI)(M)" /T /C 2>&1)
         if ($LASTEXITCODE -ne 0) {
             $allOk = $false
             Write-WarnMsg ("Failed to grant modify rights on {0}. {1}" -f $target, (($out | Out-String).Trim()))
@@ -739,7 +739,7 @@ function Grant-UsersNtpFileAccess {
     }
 
     if (-not [string]::IsNullOrWhiteSpace($ConfigFile) -and (Test-Path -LiteralPath $ConfigFile)) {
-        $out = @(& icacls.exe $ConfigFile /grant "$usersSid:(M)" /C 2>&1)
+        $out = @(& icacls.exe $ConfigFile /grant "${usersSid}:(M)" /C 2>&1)
         if ($LASTEXITCODE -ne 0) {
             $allOk = $false
             Write-WarnMsg ("Failed to grant modify rights on {0}. {1}" -f $ConfigFile, (($out | Out-String).Trim()))
@@ -749,7 +749,7 @@ function Grant-UsersNtpFileAccess {
     if (-not [string]::IsNullOrWhiteSpace($InstallRoot) -and (Test-Path -LiteralPath $InstallRoot)) {
         $scriptFiles = @(Get-ChildItem -LiteralPath $InstallRoot -Recurse -File -Include *.cmd, *.bat -ErrorAction SilentlyContinue)
         foreach ($f in $scriptFiles) {
-            $out = @(& icacls.exe $f.FullName /grant "$usersSid:(RX)" /C 2>&1)
+            $out = @(& icacls.exe $f.FullName /grant "${usersSid}:(RX)" /C 2>&1)
             if ($LASTEXITCODE -ne 0) {
                 $allOk = $false
                 Write-WarnMsg ("Failed to grant execute rights on script {0}. {1}" -f $f.FullName, (($out | Out-String).Trim()))
