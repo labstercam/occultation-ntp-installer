@@ -1656,6 +1656,32 @@ function Set-PpsProviderRegistryValue {
         return $false
     }
 
+    $existing = $null
+    try {
+        $existing = (Get-ItemProperty -LiteralPath $regPath -Name "PPSProviders" -ErrorAction Stop).PPSProviders
+    }
+    catch { }
+
+    if ($null -ne $existing) {
+        $existingDisplay = if ($existing -is [array]) { $existing -join "; " } else { [string]$existing }
+        Write-Host ""
+        Write-Host "PPSProviders registry value already exists:" -ForegroundColor Cyan
+        Write-Host ("  Current: {0}" -f $existingDisplay) -ForegroundColor White
+        Write-Host ("  New:     {0}" -f $DllPath) -ForegroundColor White
+        Write-Host ""
+
+        if ($existingDisplay -eq $DllPath) {
+            Write-Info "PPSProviders is already set to the correct value. No change needed."
+            return $true
+        }
+
+        $overwrite = Read-YesNo -Prompt "Overwrite existing PPSProviders value with the new path?" -DefaultYes $false
+        if (-not $overwrite) {
+            Write-Info "Keeping existing PPSProviders value."
+            return $true
+        }
+    }
+
     New-ItemProperty -Path $regPath -Name "PPSProviders" -PropertyType MultiString -Value $DllPath -Force | Out-Null
     Write-Ok ("Set registry PPSProviders = {0}" -f $DllPath)
     return $true
