@@ -934,7 +934,24 @@ function Update-NtpManagedSectionsFromTemplate {
     )
 
     if (-not (Test-Path -LiteralPath $TemplatePath)) {
-        throw "Template not found: $TemplatePath"
+        $remoteTemplateUrl = $script:TemplateRemoteUrl
+        if (-not [string]::IsNullOrWhiteSpace($remoteTemplateUrl)) {
+            try {
+                Write-Info "Template not found locally. Downloading from GitHub..."
+                $templateDir = Split-Path -Parent $TemplatePath
+                if (-not (Test-Path -LiteralPath $templateDir)) {
+                    New-Item -ItemType Directory -Path $templateDir -Force | Out-Null
+                }
+                Invoke-WebRequest -Uri $remoteTemplateUrl -OutFile $TemplatePath -UseBasicParsing -TimeoutSec 20
+                Write-Ok "Downloaded ntp.conf.template"
+            }
+            catch {
+                throw "Template not found locally and could not be downloaded: $_"
+            }
+        }
+        else {
+            throw "Template not found: $TemplatePath"
+        }
     }
 
     $template = Get-Content -Raw -LiteralPath $TemplatePath
@@ -1511,10 +1528,12 @@ $poolZonesPath = Join-Path $projectRoot "resources\ntp_pool_zones.json"
 $CountryConfigRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/config/ntp-country-servers.json"
 $PoolZonesRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/resources/ntp_pool_zones.json"
 $NationalUtcRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/resources/national_utc_ntp_servers.json"
+$TemplateRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/config/ntp.conf.template"
 
 $script:CountryConfigRemoteUrl = $CountryConfigRemoteUrl
 $script:PoolZonesRemoteUrl = $PoolZonesRemoteUrl
 $script:NationalUtcRemoteUrl = $NationalUtcRemoteUrl
+$script:TemplateRemoteUrl = $TemplateRemoteUrl
 
 $meinbergInstallerUrl = "https://www.meinbergglobal.com/download/ntp/windows/ntp-4.2.8p18a2-win32-setup.exe"
 $meinbergInstallerSha256 = "f933bc66ed987eb436f8345f6331de4ffad24e6ce5e5a6f5ce98109b7b29f164"
