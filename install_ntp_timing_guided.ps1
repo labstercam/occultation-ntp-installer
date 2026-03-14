@@ -1041,7 +1041,7 @@ function Add-UniqueServers {
             $result += $item
         }
     }
-    return @($result)
+    return ,@($result)
 }
 
 function Get-ServerHostFromEntry {
@@ -1075,7 +1075,7 @@ function Select-ServersFromListInteractive {
 
         $raw = Read-Host ($Prompt + " Enter server number(s) separated by comma (for example: 1,2), or press Enter for 0")
         if ([string]::IsNullOrWhiteSpace($raw)) {
-            return @()
+            return ,@()
         }
 
         $parts = @($raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
@@ -1106,7 +1106,7 @@ function Select-ServersFromListInteractive {
             continue
         }
 
-        return @($selected | Select-Object -Unique)
+        return ,@($selected | Select-Object -Unique)
     }
 }
 
@@ -1387,7 +1387,7 @@ function Resolve-AuServersInteractive {
         }
     }
 
-    return @($selected)
+    return ,@($selected)
 }
 
 function Select-NationalServersInteractive {
@@ -1395,7 +1395,7 @@ function Select-NationalServersInteractive {
 
     $choices = @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
     if ($choices.Count -le 1) {
-        return @($choices)
+        return ,@($choices)
     }
 
     while ($true) {
@@ -2195,7 +2195,7 @@ function Select-GpsEntriesToKeep {
             continue
         }
 
-        return $selected
+        return ,@($selected)
     }
 }
 
