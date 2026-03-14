@@ -36,6 +36,8 @@ This repository includes a beginner CMD launcher, a guided PowerShell installer,
 
 - `docs/automated-setup.md`:
   Detailed usage, automation flow, and advanced examples.
+- `docs/release-instructions.md`:
+  Release checklist, semantic versioning guidance, and GitHub release procedure.
 
 ## Basic Troubleshooting
 
