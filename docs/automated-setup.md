@@ -38,6 +38,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 ## What the guided installer automates
 
 - Optional download/install of Meinberg NTP.
+- Step 1 mode choice:
+  - `Automatic install (recommended)` using `config/install.auto.template.ini` and Meinberg `/USE_FILE`.
+  - `Guided install (manual screens)` interactive installer flow.
 - Optional download/install of NTP Time Server Monitor.
 - Optional GPS/PPS setup with COM auto-detection or manual COM entry.
 - Country-based server setup using curated profiles and fallback logic.
@@ -45,6 +48,36 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 - Static IP guidance during server setup, including suggested values and Windows 10/11 entry steps.
 - Restart prompt when configuration changes are detected.
 - Transcript logging to repository `logs/` when run from a local clone.
+
+## Step 1 Automatic Mode Details
+
+- Template source: `config/install.auto.template.ini`
+- Runtime-generated files (working folder):
+  - generated INI passed to Meinberg
+  - optional placeholder `ntp.conf` (when `UseConfigFile` is enabled)
+  - Meinberg unattended log file
+- Prompts:
+  - Upgrade mode: `Upgrade` (recommended) vs `Reinstall`
+  - Explicit warning: `Reinstall` can delete previous NTP configuration and servers
+  - In `Upgrade`, prompt to import placeholder `UseConfigFile` (default: No)
+
+## Standard-User Access Layout (Standalone-Friendly)
+
+The guided installer can apply a layout that allows non-admin users to operate NTP tooling:
+
+- Config path: `C:\ProgramData\NTP\etc\ntp.conf`
+- Logs path: `C:\ProgramData\NTP\logs`
+- Service config path (`-c`) is updated to ProgramData config path.
+- ACLs are applied so standard users can:
+  - edit `ntp.conf`
+  - write log files
+  - execute NTP `.cmd`/`.bat` scripts
+  - start/stop/restart `NTP` service
+
+Application behavior:
+- Automatic Step 1: applied automatically.
+- Guided/manual Step 1: prompted with recommendation.
+- If any ACL/service-right change fails, warnings are shown with details.
 
 ## Files used by guided installer
 
@@ -102,6 +135,8 @@ When install root is not provided, scripts choose in this order:
 - `%ProgramFiles(x86)%\NTP` (if present/available)
 - `%ProgramFiles%\NTP`
 
+If Program Files or TEMP/TMP environment paths are invalid/unavailable, the guided installer prompts for fallback absolute paths.
+
 ## Safety behavior
 
 - Requires Administrator privileges.
@@ -115,3 +150,14 @@ When install root is not provided, scripts choose in this order:
 - Confirm `ntp.conf` exists under the selected NTP install root.
 - Validate peers/runtime values with `ntpq -pn` and `ntpq -c rv`.
 - Validate PPS lock/source behavior in NTP Time Server Monitor.
+- For standard-user layout, verify:
+  - non-admin user can edit `C:\ProgramData\NTP\etc\ntp.conf`
+  - non-admin user can create files in `C:\ProgramData\NTP\logs`
+  - non-admin user can run stop/start/restart scripts or equivalent service actions
+
+## AU Server Selection UX Update
+
+AU/NMI/University interactive prompts were clarified to reduce selection ambiguity:
+- uses `Select up to 2 ... servers`
+- explicitly says to enter server number(s) separated by comma
+- retains fallback note: `Additional servers will be added in the next steps`

@@ -8,6 +8,32 @@ What it does:
 3. Assists with setting up GPS receivers for PPS and NMEA time
 4. Configures the NTP servers for specific countries to use their National Standard time server, and a set of good quality servers
 
+## Step 1 Install Modes
+
+Step 1 now supports two modes:
+1. `Automatic install (recommended)`:
+  Uses `config/install.auto.template.ini`, generates a local INI, and runs Meinberg with `/USE_FILE=...`.
+2. `Guided install (manual screens)`:
+  Launches Meinberg interactively.
+
+Automatic mode details:
+- Prompts for `Upgrade` or `Reinstall` mode.
+- Clearly warns that `Reinstall` can delete previous NTP configuration/servers.
+- In `Upgrade`, prompts whether to import placeholder `UseConfigFile`.
+
+## Standard-User Access Model
+
+To support standalone private users, the guided installer can apply a standard-user layout:
+1. Uses `ProgramData\NTP\etc\ntp.conf` for writable config.
+2. Uses `ProgramData\NTP\logs` for writable log output.
+3. Grants standard users modify rights for config/log paths.
+4. Grants standard users execute rights on NTP `.cmd`/`.bat` scripts.
+5. Grants standard users NTP service control rights (start/stop/restart).
+
+Behavior by Step 1 mode:
+- Automatic mode: applies this layout automatically.
+- Guided/manual mode: prompts and recommends applying it.
+
 ## For Most Users
 
 1. Download `install_ntp_timing_guided.cmd` from the latest release. [install_ntp_timing_guided.cmd](https://github.com/labstercam/occultation-ntp-installer/releases/download/v1.1.0/install_ntp_timing_guided.cmd)
@@ -50,3 +76,4 @@ What it does:
 - Resource files used during country setup are fetched from GitHub when available and cached locally for later offline reruns.
 - If PowerShell policy is restrictive, launch using:
   `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install_ntp_timing_guided.ps1`
+- If Program Files or TEMP/TMP environment paths are unavailable or invalid, the installer now prompts for fallback paths.

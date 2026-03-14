@@ -109,6 +109,47 @@ function Assert-Admin {
     }
 }
 
+function Test-DirectoryWritable {
+    param([string]$Path)
+
+    try {
+        if ([string]::IsNullOrWhiteSpace($Path)) {
+            return $false
+        }
+
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+
+        $probe = Join-Path $Path (".ocntp_write_test_{0}.tmp" -f ([guid]::NewGuid().ToString("N")))
+        Set-Content -LiteralPath $probe -Value "ok" -Encoding ASCII
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Read-PathOrExit {
+    param([string]$Prompt)
+
+    while ($true) {
+        $raw = Read-Host $Prompt
+        if ([string]::IsNullOrWhiteSpace($raw)) {
+            Write-WarnMsg "Path cannot be blank."
+            continue
+        }
+
+        $value = $raw.Trim()
+        if ($value -match '^(x|exit|quit)$') {
+            throw "Installer exited by user while entering required filesystem paths."
+        }
+
+        return $value
+    }
+}
+
 function Resolve-DefaultInstallRoot {
     $pf86 = ${env:ProgramFiles(x86)}
     $pf64 = $env:ProgramFiles
@@ -124,7 +165,84 @@ function Resolve-DefaultInstallRoot {
     }
 
     if ($candidates.Count -gt 0) {
-        return $candidates[0]
+        $preferred = $candidates[0]
+        $preferredParent = Split-Path -Parent $preferred
+        if (-not [string]::IsNullOrWhiteSpace($preferredParent) -and (Test-Path -LiteralPath $preferredParent)) {
+            return $preferred
+        }
+
+        Write-WarnMsg "Program Files path appears invalid on this system."
+        Write-WarnMsg ("Detected candidate was: {0}" -f $preferred)
+    }
+
+    Write-WarnMsg "Could not automatically determine a valid Program Files install location."
+    Write-WarnMsg "Enter a writable install folder for NTP (for example D:\\Program Files\\NTP)."
+    Write-Info "Type 'x' to exit."
+
+    while ($true) {
+        $manualRoot = Read-PathOrExit -Prompt "Enter NTP install root path"
+        if (-not [System.IO.Path]::IsPathRooted($manualRoot)) {
+            Write-WarnMsg "Please enter an absolute path."
+            continue
+        }
+
+        $parent = Split-Path -Parent $manualRoot
+        if ([string]::IsNullOrWhiteSpace($parent)) {
+            Write-WarnMsg "Could not determine parent folder for that path."
+            continue
+        }
+
+        if (-not (Test-DirectoryWritable -Path $parent)) {
+            Write-WarnMsg ("Parent folder is not writable: {0}" -f $parent)
+            continue
+        }
+
+        return $manualRoot
+    }
+
+    throw "Could not determine Program Files directory on this system."
+}
+
+function Resolve-WorkingTempDirectory {
+    param([string]$SubFolder = "occultation-ntp-installer")
+
+    $bases = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:TEMP)) { $bases += $env:TEMP }
+    if (-not [string]::IsNullOrWhiteSpace($env:TMP)) { $bases += $env:TMP }
+    $bases = @($bases | Select-Object -Unique)
+
+    foreach ($base in $bases) {
+        try {
+            if (-not (Test-Path -LiteralPath $base)) {
+                continue
+            }
+            $candidate = Join-Path $base $SubFolder
+            if (Test-DirectoryWritable -Path $candidate) {
+                return $candidate
+            }
+        }
+        catch {
+            continue
+        }
+    }
+
+    Write-WarnMsg "Could not use TEMP/TMP for working files."
+    Write-WarnMsg "Enter a writable working folder for downloads and generated installer files."
+    Write-Info "Type 'x' to exit."
+
+    while ($true) {
+        $manualDir = Read-PathOrExit -Prompt "Enter working folder path"
+        if (-not [System.IO.Path]::IsPathRooted($manualDir)) {
+            Write-WarnMsg "Please enter an absolute path."
+            continue
+        }
+
+        if (-not (Test-DirectoryWritable -Path $manualDir)) {
+            Write-WarnMsg ("Folder is not writable: {0}" -f $manualDir)
+            continue
+        }
+
+        return $manualDir
     }
 
     throw "Could not determine Program Files directory on this system."
@@ -242,6 +360,233 @@ function Install-Exe {
     Write-Ok "$Label installation completed"
 }
 
+function Set-IniKeyValue {
+    param(
+        [string[]]$Lines,
+        [string]$Section,
+        [string]$Key,
+        [string]$Value
+    )
+
+    $list = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in @($Lines)) {
+        $list.Add([string]$line)
+    }
+
+    $sectionStart = -1
+    for ($i = 0; $i -lt $list.Count; $i++) {
+        if ($list[$i].Trim().Equals("[$Section]", [System.StringComparison]::OrdinalIgnoreCase)) {
+            $sectionStart = $i
+            break
+        }
+    }
+
+    if ($sectionStart -lt 0) {
+        if ($list.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($list[$list.Count - 1])) {
+            $list.Add("")
+        }
+        $list.Add("[$Section]")
+        $list.Add(("{0}={1}" -f $Key, $Value))
+        return @($list)
+    }
+
+    $sectionEnd = $list.Count
+    for ($i = $sectionStart + 1; $i -lt $list.Count; $i++) {
+        if ($list[$i].Trim().StartsWith("[") -and $list[$i].Trim().EndsWith("]")) {
+            $sectionEnd = $i
+            break
+        }
+    }
+
+    $keyFound = $false
+    $keyPattern = "^\s*{0}\s*=" -f [regex]::Escape($Key)
+    for ($i = $sectionStart + 1; $i -lt $sectionEnd; $i++) {
+        if ([regex]::IsMatch($list[$i], $keyPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            $list[$i] = ("{0}={1}" -f $Key, $Value)
+            $keyFound = $true
+            break
+        }
+    }
+
+    if (-not $keyFound) {
+        $list.Insert($sectionEnd, ("{0}={1}" -f $Key, $Value))
+    }
+
+    return @($list)
+}
+
+function Remove-IniKey {
+    param(
+        [string[]]$Lines,
+        [string]$Section,
+        [string]$Key
+    )
+
+    $list = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in @($Lines)) {
+        $list.Add([string]$line)
+    }
+
+    $sectionStart = -1
+    for ($i = 0; $i -lt $list.Count; $i++) {
+        if ($list[$i].Trim().Equals("[$Section]", [System.StringComparison]::OrdinalIgnoreCase)) {
+            $sectionStart = $i
+            break
+        }
+    }
+
+    if ($sectionStart -lt 0) {
+        return @($list)
+    }
+
+    $sectionEnd = $list.Count
+    for ($i = $sectionStart + 1; $i -lt $list.Count; $i++) {
+        if ($list[$i].Trim().StartsWith("[") -and $list[$i].Trim().EndsWith("]")) {
+            $sectionEnd = $i
+            break
+        }
+    }
+
+    $keyPattern = "^\s*{0}\s*=" -f [regex]::Escape($Key)
+    for ($i = $sectionEnd - 1; $i -gt $sectionStart; $i--) {
+        if ([regex]::IsMatch($list[$i], $keyPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            $list.RemoveAt($i)
+        }
+    }
+
+    return @($list)
+}
+
+function Prepare-MeinbergAutomaticInstallFiles {
+    param(
+        [string]$IniTemplatePath,
+        [string]$TempDir,
+        [string]$InstallRoot,
+        [ValidateSet("Upgrade", "Reinstall")]
+        [string]$UpgradeMode = "Upgrade",
+        [bool]$ApplyUseConfigFile = $true
+    )
+
+    if (-not (Test-Path -LiteralPath $IniTemplatePath)) {
+        throw "Automatic install template not found: $IniTemplatePath"
+    }
+
+    if (-not (Test-Path -LiteralPath $TempDir)) {
+        New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
+    }
+
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $generatedIniPath = Join-Path $TempDir ("meinberg_install_{0}.ini" -f $stamp)
+    $generatedConfPath = Join-Path $TempDir ("ntp_placeholder_{0}.conf" -f $stamp)
+    $installerLogPath = Join-Path $TempDir ("meinberg_uam_{0}.log" -f $stamp)
+
+    $placeholderConf = @(
+        "# Minimal placeholder ntp.conf for Meinberg automatic install.",
+        "# Internet servers are configured later by Step 4 of this guided installer.",
+        ""
+    )
+    Set-Content -LiteralPath $generatedConfPath -Value $placeholderConf -Encoding ASCII
+
+    $iniLines = @(Get-Content -LiteralPath $IniTemplatePath)
+    $iniLines = @(Set-IniKeyValue -Lines $iniLines -Section "Installer" -Key "InstallDir" -Value $InstallRoot)
+    $iniLines = @(Set-IniKeyValue -Lines $iniLines -Section "Installer" -Key "UpgradeMode" -Value $UpgradeMode)
+    $iniLines = @(Set-IniKeyValue -Lines $iniLines -Section "Installer" -Key "Logfile" -Value $installerLogPath)
+    $iniLines = @(Set-IniKeyValue -Lines $iniLines -Section "Installer" -Key "Silent" -Value "Yes")
+    $iniLines = @(Set-IniKeyValue -Lines $iniLines -Section "Service" -Key "ServiceAccount" -Value "@SYSTEM")
+    if ($ApplyUseConfigFile) {
+        $iniLines = @(Set-IniKeyValue -Lines $iniLines -Section "Configuration" -Key "UseConfigFile" -Value $generatedConfPath)
+    }
+    else {
+        $iniLines = @(Remove-IniKey -Lines $iniLines -Section "Configuration" -Key "UseConfigFile")
+    }
+
+    Set-Content -LiteralPath $generatedIniPath -Value $iniLines -Encoding ASCII
+
+    return [PSCustomObject]@{
+        IniPath          = $generatedIniPath
+        PlaceholderPath  = $generatedConfPath
+        InstallerLogPath = $installerLogPath
+    }
+}
+
+function Read-MeinbergAutomaticUpgradeMode {
+    param(
+        [string]$InstallRoot,
+        [string]$NtpConfPath
+    )
+
+    $hasExistingInstall = (Test-Path -LiteralPath (Join-Path $InstallRoot "bin\ntpd.exe")) -or (Test-Path -LiteralPath $NtpConfPath)
+
+    while ($true) {
+        Write-Host ""
+        Write-Host "Automatic install upgrade mode:" -ForegroundColor Cyan
+        Write-Host "  1) Upgrade (recommended; tries to preserve existing configuration)"
+        Write-Host "  2) Reinstall (clean install; deletes previous NTP configuration and servers)"
+
+        if ($hasExistingInstall) {
+            Write-WarnMsg "Existing NTP install/config was detected. Reinstall will delete previous NTP configuration and servers."
+        }
+        else {
+            Write-Info "No existing NTP install/config detected."
+        }
+
+        $choice = Read-Host "Enter 1 or 2 (default 1)"
+        if ([string]::IsNullOrWhiteSpace($choice) -or $choice.Trim() -eq "1") {
+            return "Upgrade"
+        }
+        if ($choice.Trim() -eq "2") {
+            Write-WarnMsg "You selected Reinstall. This will delete previous NTP configuration and servers."
+            if (Read-YesNo -Prompt "Continue with Reinstall mode?" -DefaultYes $false) {
+                return "Reinstall"
+            }
+            continue
+        }
+
+        Write-WarnMsg "Enter 1 or 2."
+    }
+}
+
+function Read-MeinbergAutomaticUseConfigChoice {
+    param([string]$UpgradeMode)
+
+    if ($UpgradeMode -eq "Reinstall") {
+        return $true
+    }
+
+    Write-WarnMsg "Upgrade mode selected. Importing a placeholder UseConfigFile can overwrite existing NTP configuration and servers."
+    return (Read-YesNo -Prompt "In Upgrade mode, import placeholder config via UseConfigFile?" -DefaultYes $false)
+}
+
+function Read-MeinbergInstallMode {
+    param([string]$IniTemplatePath)
+
+    while ($true) {
+        Write-Host ""
+        Write-Host "Choose Meinberg setup mode:" -ForegroundColor Cyan
+        Write-Host "  1) Automatic install (recommended)"
+        Write-Host "  2) Guided install (manual screens)"
+
+        $choice = Read-Host "Enter 1 or 2 (default 1)"
+        if ([string]::IsNullOrWhiteSpace($choice) -or $choice.Trim() -eq "1") {
+            if (-not (Test-Path -LiteralPath $IniTemplatePath)) {
+                Write-WarnMsg "Automatic install template was not found: $IniTemplatePath"
+                Write-WarnMsg "Automatic install is unavailable."
+                if (Read-YesNo -Prompt "Continue with guided install mode instead?" -DefaultYes $true) {
+                    return "Guided"
+                }
+                continue
+            }
+            return "Automatic"
+        }
+
+        if ($choice.Trim() -eq "2") {
+            return "Guided"
+        }
+
+        Write-WarnMsg "Enter 1 or 2."
+    }
+}
+
 function Set-LoggingConfig {
     param(
         [string]$NtpConfPath,
@@ -284,6 +629,188 @@ function Set-LoggingConfig {
 
     Set-Content -LiteralPath $NtpConfPath -Value $content -Encoding ASCII
     Write-Ok "Logging directives prepared in $NtpConfPath"
+}
+
+function Set-NtpServiceConfigPath {
+    param([string]$ConfigPath)
+
+    $svcRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\NTP"
+    if (-not (Test-Path -LiteralPath $svcRegPath)) {
+        Write-WarnMsg "NTP service registry path not found. Service config path was not updated."
+        return $false
+    }
+
+    $currentImagePath = ""
+    try {
+        $currentImagePath = [string](Get-ItemProperty -LiteralPath $svcRegPath -Name "ImagePath" -ErrorAction Stop).ImagePath
+    }
+    catch {
+        Write-WarnMsg "Could not read NTP service ImagePath."
+        return $false
+    }
+
+    if ([string]::IsNullOrWhiteSpace($currentImagePath)) {
+        Write-WarnMsg "NTP service ImagePath is empty; could not update -c config path."
+        return $false
+    }
+
+    $updatedImagePath = $currentImagePath
+    if ($updatedImagePath -match '(?i)\s-c\s+') {
+        $updatedImagePath = $updatedImagePath -replace '(?i)(\s-c\s+)("[^"]*"|\S+)', ('$1"' + $ConfigPath + '"')
+    }
+    else {
+        $updatedImagePath = ($updatedImagePath.TrimEnd() + ' -c "' + $ConfigPath + '"')
+    }
+
+    if ($updatedImagePath -eq $currentImagePath) {
+        return $true
+    }
+
+    try {
+        Set-ItemProperty -LiteralPath $svcRegPath -Name "ImagePath" -Value $updatedImagePath -ErrorAction Stop
+        Write-Ok ("Updated NTP service config path to: {0}" -f $ConfigPath)
+        return $true
+    }
+    catch {
+        Write-WarnMsg ("Failed to update NTP service ImagePath: {0}" -f $_.Exception.Message)
+        return $false
+    }
+}
+
+function Grant-UsersNtpServiceControl {
+    $ace = "(A;;LCRPWPDTLO;;;BU)"
+
+    $sdOutput = @(& sc.exe sdshow NTP 2>$null)
+    if ($sdOutput.Count -eq 0) {
+        Write-WarnMsg "Could not read NTP service security descriptor (sc sdshow)."
+        return $false
+    }
+
+    $sddl = [string]($sdOutput | Where-Object { $_ -match '^D:' } | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($sddl)) {
+        Write-WarnMsg "NTP service SDDL was not returned by sc sdshow."
+        return $false
+    }
+
+    if ($sddl.Contains($ace)) {
+        return $true
+    }
+
+    $newSddl = ""
+    $saclIndex = $sddl.IndexOf("S:")
+    if ($saclIndex -gt 0) {
+        $newSddl = $sddl.Substring(0, $saclIndex) + $ace + $sddl.Substring($saclIndex)
+    }
+    else {
+        $newSddl = $sddl + $ace
+    }
+
+    $setOutput = @(& sc.exe sdset NTP $newSddl 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        Write-WarnMsg ("Failed to grant Users service control rights on NTP. {0}" -f (($setOutput | Out-String).Trim()))
+        return $false
+    }
+
+    Write-Ok "Granted standard users start/stop/restart rights for NTP service."
+    return $true
+}
+
+function Grant-UsersNtpFileAccess {
+    param(
+        [string]$InstallRoot,
+        [string]$ConfigDir,
+        [string]$LogsDir,
+        [string]$ConfigFile
+    )
+
+    $usersSid = '*S-1-5-32-545'
+    $allOk = $true
+
+    foreach ($target in @($ConfigDir, $LogsDir)) {
+        if ([string]::IsNullOrWhiteSpace($target)) { continue }
+        if (-not (Test-Path -LiteralPath $target)) {
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+        }
+        $out = @(& icacls.exe $target /grant "$usersSid:(OI)(CI)(M)" /T /C 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            $allOk = $false
+            Write-WarnMsg ("Failed to grant modify rights on {0}. {1}" -f $target, (($out | Out-String).Trim()))
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ConfigFile) -and (Test-Path -LiteralPath $ConfigFile)) {
+        $out = @(& icacls.exe $ConfigFile /grant "$usersSid:(M)" /C 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            $allOk = $false
+            Write-WarnMsg ("Failed to grant modify rights on {0}. {1}" -f $ConfigFile, (($out | Out-String).Trim()))
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($InstallRoot) -and (Test-Path -LiteralPath $InstallRoot)) {
+        $scriptFiles = @(Get-ChildItem -LiteralPath $InstallRoot -Recurse -File -Include *.cmd, *.bat -ErrorAction SilentlyContinue)
+        foreach ($f in $scriptFiles) {
+            $out = @(& icacls.exe $f.FullName /grant "$usersSid:(RX)" /C 2>&1)
+            if ($LASTEXITCODE -ne 0) {
+                $allOk = $false
+                Write-WarnMsg ("Failed to grant execute rights on script {0}. {1}" -f $f.FullName, (($out | Out-String).Trim()))
+            }
+        }
+    }
+
+    if ($allOk) {
+        Write-Ok "Granted standard-user access for ntp.conf/log files and script execution."
+    }
+
+    return $allOk
+}
+
+function Configure-StandaloneUserNtpAccess {
+    param(
+        [string]$InstallRoot,
+        [string]$CurrentNtpConfPath
+    )
+
+    $programDataBase = if (-not [string]::IsNullOrWhiteSpace($env:ProgramData)) {
+        $env:ProgramData
+    }
+    else {
+        Join-Path $env:SystemDrive "ProgramData"
+    }
+
+    $targetRoot = Join-Path $programDataBase "NTP"
+    $targetEtc = Join-Path $targetRoot "etc"
+    $targetLogs = Join-Path $targetRoot "logs"
+    $targetConf = Join-Path $targetEtc "ntp.conf"
+
+    if (-not (Test-Path -LiteralPath $targetEtc)) {
+        New-Item -ItemType Directory -Path $targetEtc -Force | Out-Null
+    }
+    if (-not (Test-Path -LiteralPath $targetLogs)) {
+        New-Item -ItemType Directory -Path $targetLogs -Force | Out-Null
+    }
+
+    if (-not (Test-Path -LiteralPath $targetConf) -and (Test-Path -LiteralPath $CurrentNtpConfPath)) {
+        Copy-Item -LiteralPath $CurrentNtpConfPath -Destination $targetConf -Force
+        Write-Info ("Copied existing ntp.conf to user-writable path: {0}" -f $targetConf)
+    }
+
+    $serviceConfigUpdated = Set-NtpServiceConfigPath -ConfigPath $targetConf
+    $fileAccessGranted = Grant-UsersNtpFileAccess -InstallRoot $InstallRoot -ConfigDir $targetEtc -LogsDir $targetLogs -ConfigFile $targetConf
+    $serviceControlGranted = Grant-UsersNtpServiceControl
+    $allApplied = ($serviceConfigUpdated -and $fileAccessGranted -and $serviceControlGranted)
+
+    if (-not $allApplied) {
+        Write-WarnMsg "One or more standard-user access changes did not apply successfully."
+    }
+
+    return [PSCustomObject]@{
+        NtpConfPath          = $targetConf
+        StatsDir             = $targetLogs
+        ServiceConfigUpdated = $serviceConfigUpdated
+        FileAccessGranted    = $fileAccessGranted
+        ServiceControlGranted= $serviceControlGranted
+        AllApplied           = $allApplied
+    }
 }
 
 function Get-JsonResourceWithFallback {
@@ -411,7 +938,7 @@ function Add-UniqueServers {
             $result += $item
         }
     }
-    return $result
+    return @($result)
 }
 
 function Get-ServerHostFromEntry {
@@ -443,7 +970,7 @@ function Select-ServersFromListInteractive {
             Write-Host ("  {0}) {1}" -f ($i + 1), $choices[$i])
         }
 
-        $raw = Read-Host ($Prompt + " Enter numbers separated by comma, or press Enter for 0")
+        $raw = Read-Host ($Prompt + " Enter server number(s) separated by comma (for example: 1,2), or press Enter for 0")
         if ([string]::IsNullOrWhiteSpace($raw)) {
             return @()
         }
@@ -723,11 +1250,11 @@ function Resolve-AuServersInteractive {
         $nmiUsed = $true
 
         $remainingNmi = @($nmiAll | Where-Object { (Get-ServerHostFromEntry -Entry $_) -ne 'ntp.nmi.gov.au' } | Select-Object -Unique)
-        $chosenNmi = Select-ServersFromListInteractive -Header "Select 0, 1 or 2 NMI servers:`nChoose ones nearest to your city/state/territory.`nIf you choose 0 or 1, additional servers will be added in the next steps." -Prompt "Select NMI servers." -Servers $remainingNmi -MaxCount 2
+        $chosenNmi = Select-ServersFromListInteractive -Header "Select up to 2 NMI servers.`nChoose ones nearest to your city/state/territory.`nAdditional servers will be added in the next steps." -Prompt "Select NMI servers." -Servers $remainingNmi -MaxCount 2
         $selected = Add-UniqueServers -Base $selected -ToAdd $chosenNmi
     }
 
-    $chosenEdu = Select-ServersFromListInteractive -Header "Select 0, 1 or 2 University servers:`nChoose ones nearest to your city/state/territory.`nIf you choose 0 or 1, additional servers will be added in the next steps." -Prompt "Select University servers." -Servers $eduAll -MaxCount 2
+    $chosenEdu = Select-ServersFromListInteractive -Header "Select up to 2 University servers.`nChoose ones nearest to your city/state/territory.`nEnter server number(s) separated by comma (for example: 1,2), or press Enter for 0.`nAdditional servers will be added in the next steps." -Prompt "Select University servers." -Servers $eduAll -MaxCount 2
     $selected = Add-UniqueServers -Base $selected -ToAdd $chosenEdu
 
     foreach ($pool in $poolNumbered) {
@@ -765,7 +1292,7 @@ function Select-NationalServersInteractive {
 
     $choices = @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
     if ($choices.Count -le 1) {
-        return $choices
+        return @($choices)
     }
 
     while ($true) {
@@ -913,7 +1440,7 @@ function Resolve-ServersForCountryViaNationalInventory {
 
     $poolFallback = Resolve-ServersForOtherCountry -CountryCode $CountryCode -PoolZonesPath $PoolZonesPath -UseRegionWhenCountryPoolSmallOnly
     $selectedServers = Add-UniqueServers -Base $selectedServers -ToAdd $poolFallback
-    return $selectedServers
+    return @($selectedServers)
 }
 
 function Resolve-ServersForCountry {
@@ -1754,6 +2281,7 @@ $meinbergInstallerUrl = "https://www.meinbergglobal.com/download/ntp/windows/ntp
 $meinbergInstallerSha256 = "f933bc66ed987eb436f8345f6331de4ffad24e6ce5e5a6f5ce98109b7b29f164"
 $meinbergInstallerSha256Url = "https://www.meinbergglobal.com/download/ntp/windows/ntp-4.2.8p18a2-win32-setup.exe.sha256sum"
 $meinbergInstallerArgs = ""
+$meinbergAutoIniTemplatePath = Join-Path $projectRoot "config\install.auto.template.ini"
 
 $ntpMonitorInstallerUrl = "https://www.meinbergglobal.com/download/ntp/windows/time-server-monitor/ntp-time-server-monitor-104.exe"
 $ntpMonitorInstallerArgs = ""
@@ -1763,11 +2291,7 @@ $statsDir = Join-Path $installRoot "etc\"
 $ntpConfPath = Join-Path $installRoot "etc\ntp.conf"
 $ppsRegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\NTP"
 $ppsDllPath = Join-Path $installRoot "bin\loopback-ppsapi-provider.dll"
-$downloadDir = Join-Path $env:TEMP "occultation-ntp-installer"
-
-if (-not (Test-Path -LiteralPath $downloadDir)) {
-    New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
-}
+$downloadDir = Resolve-WorkingTempDirectory -SubFolder "occultation-ntp-installer"
 
 $logDir = Join-Path $projectRoot "logs"
 if (-not (Test-Path -LiteralPath $logDir)) {
@@ -1819,6 +2343,8 @@ try {
     Write-Host "Each step is optional. At every step you can choose: Install, Skip, or Exit." -ForegroundColor Cyan
     Write-Host "You can also do all steps manually and follow project documentation when available." -ForegroundColor Yellow
     Write-Host ("Installer log: {0}" -f $logPath) -ForegroundColor DarkGray
+    Write-Host ("Resolved NTP install root: {0}" -f $installRoot) -ForegroundColor DarkGray
+    Write-Host ("Resolved working folder: {0}" -f $downloadDir) -ForegroundColor DarkGray
 
     if (-not (Read-YesNo -Prompt "Proceed with guided installer?" -DefaultYes $true)) {
         throw "Installer canceled by user at launch page."
@@ -1826,16 +2352,22 @@ try {
 
     if (Confirm-Step -Title "Step 1: Install Meinberg NTP and prepare logging" -Details @(
             "Downloads and installs Meinberg NTP.",
+            "Automatic install (recommended) uses config\\install.auto.template.ini and applies local paths.",
+            "Guided install remains available for manual screen-by-screen setup.",
             "NTP internet server selection is done in a later step.",
             "Install using default. Do not add any predefined servers. They will be added later in Step 4.",
             ("Installer URL: {0}" -f $meinbergInstallerUrl),
+            ("Automatic install template: {0}" -f $meinbergAutoIniTemplatePath),
             ("Install root: {0}" -f $installRoot),
             ("Config file: {0}" -f $ntpConfPath),
             ("Log folder: {0}" -f $statsDir),
             ("Advanced (automatic if PPS is enabled): registry value {0}\\PPSProviders" -f $ppsRegistryPath)
         )) {
 
-        Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added later in Step 4."
+        $meinbergInstallMode = Read-MeinbergInstallMode -IniTemplatePath $meinbergAutoIniTemplatePath
+        if ($meinbergInstallMode -eq "Guided") {
+            Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added later in Step 4."
+        }
 
         $meinbergInstallerPath = Join-Path $downloadDir "meinberg_installer.exe"
         Invoke-InstallerDownload -Url $meinbergInstallerUrl -OutputPath $meinbergInstallerPath -Label "Meinberg NTP"
@@ -1846,7 +2378,68 @@ try {
         }
         Assert-FileSha256 -Path $meinbergInstallerPath -ExpectedSha256 $effectiveMeinbergSha -Label "Meinberg NTP installer"
 
-        Install-Exe -InstallerPath $meinbergInstallerPath -Arguments $meinbergInstallerArgs -Label "Meinberg NTP"
+        if ($meinbergInstallMode -eq "Automatic") {
+            $selectedUpgradeMode = Read-MeinbergAutomaticUpgradeMode -InstallRoot $installRoot -NtpConfPath $ntpConfPath
+            $useConfigFileInAutomaticMode = Read-MeinbergAutomaticUseConfigChoice -UpgradeMode $selectedUpgradeMode
+            $autoInstall = Prepare-MeinbergAutomaticInstallFiles -IniTemplatePath $meinbergAutoIniTemplatePath -TempDir $downloadDir -InstallRoot $installRoot -UpgradeMode $selectedUpgradeMode -ApplyUseConfigFile:$useConfigFileInAutomaticMode
+            $automaticArgs = "/USE_FILE=`"$($autoInstall.IniPath)`""
+            Write-Host ""
+            Write-Host "Automatic install settings:" -ForegroundColor Cyan
+            Write-Host ("  InstallDir:   {0}" -f $installRoot)
+            Write-Host ("  UpgradeMode:  {0}" -f $selectedUpgradeMode)
+            Write-Host ("  Silent:       Yes")
+            Write-Host ("  ServiceAccount: @SYSTEM")
+            if ($useConfigFileInAutomaticMode) {
+                Write-Host ("  UseConfigFile: {0}" -f $autoInstall.PlaceholderPath)
+            }
+            else {
+                Write-Host ("  UseConfigFile: not set (preserve existing config if installer supports it)")
+            }
+            Write-Host ("  Installer log: {0}" -f $autoInstall.InstallerLogPath)
+            Write-Host ""
+            Write-Info ("Automatic install file: {0}" -f $autoInstall.IniPath)
+            if ($useConfigFileInAutomaticMode) {
+                Write-Info ("Automatic placeholder ntp.conf: {0}" -f $autoInstall.PlaceholderPath)
+            }
+            else {
+                Write-Info "Automatic mode will not import a placeholder ntp.conf in this run."
+            }
+            Write-Info ("Automatic installer log: {0}" -f $autoInstall.InstallerLogPath)
+            Install-Exe -InstallerPath $meinbergInstallerPath -Arguments $automaticArgs -Label "Meinberg NTP"
+
+            # Automatic mode: always apply recommended standard-user access layout.
+            $layout = Configure-StandaloneUserNtpAccess -InstallRoot $installRoot -CurrentNtpConfPath $ntpConfPath
+            $ntpConfPath = [string]$layout.NtpConfPath
+            $statsDir = [string]$layout.StatsDir
+            if ($layout.AllApplied) {
+                Write-Ok "Applied standard-user access layout automatically for this install."
+            }
+            else {
+                Write-WarnMsg "Standard-user access layout was attempted, but some required permission/service changes failed."
+                Write-WarnMsg "Review warnings above to complete: ntp.conf edit rights, log write rights, and NTP service control rights."
+            }
+        }
+        else {
+            Install-Exe -InstallerPath $meinbergInstallerPath -Arguments $meinbergInstallerArgs -Label "Meinberg NTP"
+
+            Write-WarnMsg "Recommended: move ntp.conf/logs to ProgramData and grant standard-user rights for scripts + NTP service control."
+            if (Read-YesNo -Prompt "Apply recommended standard-user access changes now?" -DefaultYes $true) {
+                $layout = Configure-StandaloneUserNtpAccess -InstallRoot $installRoot -CurrentNtpConfPath $ntpConfPath
+                $ntpConfPath = [string]$layout.NtpConfPath
+                $statsDir = [string]$layout.StatsDir
+                if ($layout.AllApplied) {
+                    Write-Ok "Applied standard-user access layout."
+                }
+                else {
+                    Write-WarnMsg "Standard-user access layout was attempted, but some required permission/service changes failed."
+                    Write-WarnMsg "Review warnings above to complete: ntp.conf edit rights, log write rights, and NTP service control rights."
+                }
+            }
+            else {
+                Write-WarnMsg "Keeping default Program Files layout. Standard users may be unable to edit ntp.conf, write logs, or control the NTP service."
+            }
+        }
+
         Set-LoggingConfig -NtpConfPath $ntpConfPath -StatsDir $statsDir
         $restartRecommended = $true
     }

@@ -1,17 +1,28 @@
-# v1.1.0 - Improved Guided Installer Bootstrap And Offline Fallback
+# v1.2.0 - Installer Modes, Standard-User Access, And AU Flow Fixes
 
 ## What Changed
-- `install_ntp_timing_guided.cmd` now always attempts to download the latest guided PowerShell installer from GitHub before running.
-- If GitHub is unavailable and a previously downloaded local installer exists, the launcher now warns once and prompts whether to continue with the local copy.
-- When local fallback is chosen, the guided installer now runs in an explicit `[OFFLINE MODE]` and avoids further remote downloads for that run.
-- Guided installer resource handling is now consistent across Step 4 support files.
-- Static IP guidance in Step 4 now shows suggested values directly inside the Windows 10/11 entry instructions.
+- Step 1 now supports two explicit modes:
+	- `Automatic install (recommended)` via `config/install.auto.template.ini`
+	- `Guided install (manual screens)`
+- Automatic mode now prompts for `Upgrade` vs `Reinstall` and clearly warns that `Reinstall` can delete previous NTP config/servers.
+- In automatic `Upgrade` mode, installer now prompts whether to import placeholder `UseConfigFile`.
+- Added standard-user access layout support for standalone users:
+	- writable config at `ProgramData\NTP\etc\ntp.conf`
+	- writable logs at `ProgramData\NTP\logs`
+	- grants standard users script execute rights and NTP service start/stop/restart rights
+- Automatic mode applies standard-user layout unprompted.
+- Guided/manual mode recommends standard-user layout and prompts before applying.
+- Added resilient prompts when Program Files or TEMP/TMP environment paths are invalid/unavailable.
+- AU server selection flow fixed and clarified:
+	- fixed scalar `.Count` error path when selecting no university servers
+	- improved prompt wording for NMI/University selection and comma-separated input
+- Additional array-return hardening added in country/region flows to avoid scalar `.Count` failures.
 
 ## Why This Release Matters
-- Single-file users can launch from the `.cmd` file more reliably.
-- Reinstalls are safer because the launcher refreshes the main `.ps1` on each run when internet is available.
-- Offline reruns are clearer and more predictable.
-- Step 4 country server setup behaves better when files are not already present locally.
+- Step 1 behavior is clearer and safer for both new installs and reinstalls.
+- Standalone non-admin users can now run daily operations more reliably (service control, logging, config edits) when the recommended layout is applied.
+- AU interactive server selection is less error-prone and easier to understand.
+- Installer is more resilient on systems with unusual filesystem environment variable layouts.
 
 ## Download
 - `install_ntp_timing_guided.cmd` (recommended for most users)
@@ -26,14 +37,10 @@
 6. Follow guided installer prompts.
 
 ## Notable Improvements
-- Remote-first resource loading now behaves consistently for:
-	- country server configuration
-	- national UTC metadata
-	- NTP pool metadata
-	- `ntp.conf` template handling
-- Successfully downloaded resource files are cached locally for later offline use.
-- Misleading missing-local-file warnings during country summary/help flow were removed.
-- Static IP help is clearer for Windows 10/11 users during Step 4.
+- New automatic install template file: `config/install.auto.template.ini`
+- Improved reporting for permission/service-right application outcomes
+- Startup now prints resolved install root and working folder
+- Program Files / TEMP fallback prompts added for path resilience
 
 ## Notes
 - Legacy/testing script is still included under `scripts/legacy/`.
