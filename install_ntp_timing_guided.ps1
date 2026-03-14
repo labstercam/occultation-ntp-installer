@@ -773,7 +773,10 @@ function Set-NtpServiceConfigPath {
 }
 
 function Grant-UsersNtpServiceControl {
-    $ace = "(A;;LCRPWPDTLO;;;BU)"
+    # Include query/read rights in addition to start/stop/restart so GUI tools
+    # like NTP Time Server Monitor can open and manage the service reliably.
+    $desiredAce = "(A;;CCLCSWRPWPDTLOCRRC;;;BU)"
+    $legacyAce = "(A;;LCRPWPDTLO;;;BU)"
 
     $sdOutput = @(& sc.exe sdshow NTP 2>$null)
     if ($sdOutput.Count -eq 0) {
@@ -787,17 +790,17 @@ function Grant-UsersNtpServiceControl {
         return $false
     }
 
-    if ($sddl.Contains($ace)) {
+    if ($sddl.Contains($desiredAce)) {
         return $true
     }
 
     $newSddl = ""
     $saclIndex = $sddl.IndexOf("S:")
     if ($saclIndex -gt 0) {
-        $newSddl = $sddl.Substring(0, $saclIndex) + $ace + $sddl.Substring($saclIndex)
+        $newSddl = $sddl.Substring(0, $saclIndex) + $desiredAce + $sddl.Substring($saclIndex)
     }
     else {
-        $newSddl = $sddl + $ace
+        $newSddl = $sddl + $desiredAce
     }
 
     $setOutput = @(& sc.exe sdset NTP $newSddl 2>&1)
@@ -806,7 +809,12 @@ function Grant-UsersNtpServiceControl {
         return $false
     }
 
-    Write-Ok "Granted standard users start/stop/restart rights for NTP service."
+    if ($sddl.Contains($legacyAce)) {
+        Write-Ok "Upgraded NTP service ACL from legacy minimal rights to GUI-compatible standard-user rights."
+    }
+    else {
+        Write-Ok "Granted GUI-compatible standard-user rights for NTP service control."
+    }
     return $true
 }
 
