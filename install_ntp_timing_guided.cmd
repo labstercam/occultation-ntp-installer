@@ -6,11 +6,23 @@ set "PS_SCRIPT=%SCRIPT_DIR%install_ntp_timing_guided.ps1"
 set "ELEVATED_FLAG=%~1"
 
 if not exist "%PS_SCRIPT%" (
-  echo [ERROR] Could not find PowerShell script:
-  echo   %PS_SCRIPT%
+  echo [INFO] PowerShell script not found alongside this launcher.
+  echo        Downloading from GitHub...
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+    "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/install_ntp_timing_guided.ps1' -OutFile '%PS_SCRIPT%' -UseBasicParsing"
+  if not exist "%PS_SCRIPT%" (
+    echo.
+    echo [ERROR] Could not find or download the PowerShell script:
+    echo   %PS_SCRIPT%
+    echo.
+    echo Please download the full installer package from:
+    echo   https://github.com/labstercam/occultation-ntp-installer
+    echo.
+    pause
+    exit /b 1
+  )
+  echo [OK] Downloaded install_ntp_timing_guided.ps1
   echo.
-  pause
-  exit /b 1
 )
 
 rem Ensure admin context; if not elevated, relaunch this CMD via UAC once.
