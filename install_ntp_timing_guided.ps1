@@ -604,6 +604,8 @@ function Show-StaticIpGuidance {
     try {
         Write-Host "Brief static IP guide for Windows 10/11:" -ForegroundColor Cyan
 
+        $guidanceLines = @()
+
         $net = Get-ActiveIpv4Configuration
         if ($null -ne $net -and -not [string]::IsNullOrWhiteSpace([string]$net.IPAddress)) {
             $suggestedIp = Get-SuggestedStaticIpAddress -CurrentIp ([string]$net.IPAddress) -Gateway ([string]$net.Gateway)
@@ -626,10 +628,17 @@ function Show-StaticIpGuidance {
             Write-Host ("  IP address: {0}" -f $suggestedIp)
             Write-Host ("  Subnet mask: {0}" -f [string]$net.SubnetMask)
             Write-Host ("  Gateway: {0}" -f [string]$net.Gateway)
+
+            $guidanceLines += ("  IP address: {0}" -f $suggestedIp)
+            $guidanceLines += ("  Subnet mask: {0}" -f [string]$net.SubnetMask)
+            $guidanceLines += ("  Gateway: {0}" -f [string]$net.Gateway)
+
             if ($dnsList.Count -gt 0) {
                 Write-Host ("  Preferred DNS: {0}" -f [string]$dnsList[0])
+                $guidanceLines += ("  Preferred DNS: {0}" -f [string]$dnsList[0])
                 if ($dnsList.Count -gt 1) {
                     Write-Host ("  Alternate DNS: {0}" -f [string]$dnsList[1])
+                    $guidanceLines += ("  Alternate DNS: {0}" -f [string]$dnsList[1])
                 }
             }
 
@@ -646,6 +655,12 @@ function Show-StaticIpGuidance {
         Write-Host "  2) Open your active adapter (Ethernet/Wi-Fi) and choose View additional properties."
         Write-Host "  3) Under IP assignment, click Edit."
         Write-Host "  4) Select Manual, enable IPv4, and enter the suggested values."
+        if ($guidanceLines.Count -gt 0) {
+            Write-Host "     Suggested values for this PC:" -ForegroundColor Cyan
+            foreach ($line in $guidanceLines) {
+                Write-Host ("     {0}" -f $line.Trim())
+            }
+        }
         Write-Host "  5) Save and confirm internet access still works."
         Write-Host ""
         Write-Host "Simple step-by-step guide: https://support.microsoft.com/windows/change-tcp-ip-settings"
