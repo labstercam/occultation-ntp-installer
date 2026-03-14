@@ -1,8 +1,12 @@
 # Occultation NTP Installer (Windows)
 
-Guided Windows installer for Meinberg NTP + GPS/PPS timing setup used in occultation workflows.
+Guided Windows installer for Meinberg NTP + GPS/PPS timing setup used in occultation workflows. Designed to make installing and setting up NTP and GPS time as easy as it can be.
 
-This repository includes a beginner CMD launcher, a guided PowerShell installer, and legacy/testing scripts.
+What it does:
+1. Downloads and installs Meinberg NTP
+2. Downloads and installs Meinberg NTP Time Server Monitor for Windows
+3. Assists with setting up GPS receivers for PPS and NMEA time
+4. Configures the NTP servers for specific countries to use their National Standard time server, and a set of good quality servers
 
 ## For Most Users
 
