@@ -398,6 +398,27 @@ function Check-SupportFileAvailability {
     }
 }
 
+function Test-MeinbergAutomaticInstallSuccess {
+    param([string]$InstallerLogPath)
+
+    if ([string]::IsNullOrWhiteSpace($InstallerLogPath)) {
+        return $false
+    }
+
+    if (-not (Test-Path -LiteralPath $InstallerLogPath)) {
+        return $false
+    }
+
+    try {
+        $logText = Get-Content -LiteralPath $InstallerLogPath -Raw -ErrorAction Stop
+        return ($logText -match '(?i)installation\s+successfully\s+completed')
+    }
+    catch {
+        Write-WarnMsg ("Could not read Meinberg installer log for success check: {0}" -f $_.Exception.Message)
+        return $false
+    }
+}
+
 function Install-Exe {
     param(
         [string]$InstallerPath,
@@ -2495,6 +2516,7 @@ try {
                 Write-Info "Automatic mode will not import a placeholder ntp.conf in this run."
             }
             Write-Info ("Automatic installer log: {0}" -f $autoInstall.InstallerLogPath)
+            $automaticInstallRecovered = $false
             try {
                 Install-Exe -InstallerPath $meinbergInstallerPath -Arguments $automaticArgs -Label "Meinberg NTP"
             }
@@ -2502,6 +2524,13 @@ try {
                 Write-WarnMsg ("Automatic install failed: {0}" -f $_.Exception.Message)
                 Write-WarnMsg ("Generated automatic INI: {0}" -f $autoInstall.IniPath)
                 Write-WarnMsg ("Installer log path: {0}" -f $autoInstall.InstallerLogPath)
+
+                $logIndicatesSuccess = Test-MeinbergAutomaticInstallSuccess -InstallerLogPath $autoInstall.InstallerLogPath
+                if ($logIndicatesSuccess) {
+                    Write-WarnMsg "Installer returned a non-zero code, but the Meinberg log reports successful completion."
+                    Write-Ok "Continuing based on installer log success marker."
+                    $automaticInstallRecovered = $true
+                }
 
                 if (Test-Path -LiteralPath $autoInstall.InstallerLogPath) {
                     Write-Info "Last lines from Meinberg automatic installer log:"
@@ -2513,13 +2542,15 @@ try {
                     Write-WarnMsg "Installer log file was not created by Meinberg installer."
                 }
 
-                if (Read-YesNo -Prompt "Retry Step 1 now using guided install mode?" -DefaultYes $true) {
-                    Write-WarnMsg "Falling back to guided install mode for Step 1."
-                    Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added later in Step 4."
-                    Install-Exe -InstallerPath $meinbergInstallerPath -Arguments @() -Label "Meinberg NTP"
-                }
-                else {
-                    throw
+                if (-not $automaticInstallRecovered) {
+                    if (Read-YesNo -Prompt "Retry Step 1 now using guided install mode?" -DefaultYes $true) {
+                        Write-WarnMsg "Falling back to guided install mode for Step 1."
+                        Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added later in Step 4."
+                        Install-Exe -InstallerPath $meinbergInstallerPath -Arguments @() -Label "Meinberg NTP"
+                    }
+                    else {
+                        throw
+                    }
                 }
             }
 
