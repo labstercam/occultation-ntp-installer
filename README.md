@@ -10,7 +10,7 @@ What it does:
 
 ## For Most Users
 
-1. Download `install_ntp_timing_guided.cmd` from the latest release.
+1. Download `install_ntp_timing_guided.cmd` from the latest release. [install_ntp_timing_guided.cmd](https://github.com/labstercam/occultation-ntp-installer/releases/download/v1.1.0/install_ntp_timing_guided.cmd)
 2. Double-click it.
 3. Accept Administrator prompt (UAC).
 4. The launcher downloads the latest `install_ntp_timing_guided.ps1` from GitHub.
