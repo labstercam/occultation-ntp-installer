@@ -5,6 +5,22 @@ set "SCRIPT_DIR=%~dp0"
 set "PS_SCRIPT=%SCRIPT_DIR%install_ntp_timing_guided.ps1"
 set "PS_SCRIPT_URL=https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/install_ntp_timing_guided.ps1"
 set "ELEVATED_FLAG=%~1"
+set "OCNTP_REMOTE_DISABLED=0"
+
+rem Ensure admin context first; if not elevated, relaunch this CMD via UAC once.
+powershell.exe -NoProfile -Command "$p = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent()); if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 0 } else { exit 1 }"
+if not "%ERRORLEVEL%"=="0" (
+  if /I "%ELEVATED_FLAG%"=="--elevated" (
+    echo [ERROR] Could not obtain Administrator rights.
+    echo Please right-click this file and choose "Run as administrator".
+    pause
+    exit /b 1
+  )
+
+  echo Requesting Administrator rights...
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -Verb RunAs -FilePath '%ComSpec%' -ArgumentList '/c """%~f0"" --elevated"'"
+  exit /b %ERRORLEVEL%
+)
 
 echo [INFO] Downloading latest PowerShell script from GitHub...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -35,11 +51,10 @@ if not "%ERRORLEVEL%"=="0" (
     echo [INFO] Cancelled by user.
     exit /b 1
   )
+  set "OCNTP_REMOTE_DISABLED=1"
   echo [INFO] Continuing with local script version.
   echo.
-)
-
-if "%ERRORLEVEL%"=="0" (
+) else (
   if not exist "%PS_SCRIPT%" (
     echo.
     echo [ERROR] Download appeared to succeed but script is missing:
@@ -50,20 +65,6 @@ if "%ERRORLEVEL%"=="0" (
   )
   echo [OK] Downloaded install_ntp_timing_guided.ps1
   echo.
-)
-rem Ensure admin context; if not elevated, relaunch this CMD via UAC once.
-powershell.exe -NoProfile -Command "$p = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent()); if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 0 } else { exit 1 }"
-if not "%ERRORLEVEL%"=="0" (
-  if /I "%ELEVATED_FLAG%"=="--elevated" (
-    echo [ERROR] Could not obtain Administrator rights.
-    echo Please right-click this file and choose "Run as administrator".
-    pause
-    exit /b 1
-  )
-
-  echo Requesting Administrator rights...
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -Verb RunAs -FilePath '%ComSpec%' -ArgumentList '/c """%~f0"" --elevated"'"
-  exit /b %ERRORLEVEL%
 )
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%"

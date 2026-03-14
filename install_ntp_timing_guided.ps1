@@ -9,6 +9,16 @@ function Write-WarnMsg([string]$Message) { Write-Host "[WARN] $Message" -Foregro
 function Write-Ok([string]$Message) { Write-Host "[ OK ] $Message" -ForegroundColor Green }
 function Write-Step([string]$Message) { Write-Host "`n=== $Message ===" -ForegroundColor Green }
 
+$script:RemoteDownloadsDisabled = ($env:OCNTP_REMOTE_DISABLED -eq '1')
+$script:RemoteOverrideNoticeShown = $false
+
+function Show-RemoteOverrideNotice {
+    if ($script:RemoteDownloadsDisabled -and -not $script:RemoteOverrideNoticeShown) {
+        Write-WarnMsg "Remote downloads are disabled by launcher choice. Using local files only where available."
+        $script:RemoteOverrideNoticeShown = $true
+    }
+}
+
 function Wait-BeforeCloseIfNeeded {
     # Keep standalone ConsoleHost windows open so users can read output/errors.
     if ($Host.Name -ne 'ConsoleHost') {
@@ -184,6 +194,16 @@ function Invoke-InstallerDownload {
         throw "$Label URL is empty."
     }
 
+    if ($script:RemoteDownloadsDisabled) {
+        Show-RemoteOverrideNotice
+        if (Test-Path -LiteralPath $OutputPath) {
+            Write-WarnMsg "Using local cached $Label installer: $OutputPath"
+            return
+        }
+
+        throw "$Label download skipped (remote disabled) and no local cached installer was found: $OutputPath"
+    }
+
     Write-Info "Downloading $Label from $Url"
     Invoke-WebRequest -Uri $Url -OutFile $OutputPath -UseBasicParsing
     Write-Ok "Downloaded $Label to $OutputPath"
@@ -273,11 +293,24 @@ function Get-JsonResourceWithFallback {
         [string]$ResourceLabel
     )
 
-    if (-not [string]::IsNullOrWhiteSpace($RemoteUrl)) {
+    if ($script:RemoteDownloadsDisabled) {
+        Show-RemoteOverrideNotice
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($RemoteUrl)) {
         try {
             Write-Info ("Loading {0} from GitHub: {1}" -f $ResourceLabel, $RemoteUrl)
             $resp = Invoke-WebRequest -Uri $RemoteUrl -UseBasicParsing -TimeoutSec 20
-            return ($resp.Content | ConvertFrom-Json)
+            $contentText = Convert-ToTextFromResponseContent -Content $resp.Content
+
+            $localDir = Split-Path -Parent $LocalPath
+            if (-not [string]::IsNullOrWhiteSpace($localDir) -and -not (Test-Path -LiteralPath $localDir)) {
+                New-Item -ItemType Directory -Path $localDir -Force | Out-Null
+            }
+
+            Set-Content -LiteralPath $LocalPath -Value $contentText -Encoding UTF8
+            Write-Info ("Cached {0} locally: {1}" -f $ResourceLabel, $LocalPath)
+
+            return ($contentText | ConvertFrom-Json)
         }
         catch {
             Write-WarnMsg ("Failed to load {0} from GitHub: {1}" -f $ResourceLabel, $_.Exception.Message)
@@ -935,7 +968,11 @@ function Update-NtpManagedSectionsFromTemplate {
 
     if (-not (Test-Path -LiteralPath $TemplatePath)) {
         $remoteTemplateUrl = $script:TemplateRemoteUrl
-        if (-not [string]::IsNullOrWhiteSpace($remoteTemplateUrl)) {
+        if ($script:RemoteDownloadsDisabled) {
+            Show-RemoteOverrideNotice
+            throw "Template not found locally and remote downloads are disabled: $TemplatePath"
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($remoteTemplateUrl)) {
             try {
                 Write-Info "Template not found locally. Downloading from GitHub..."
                 $templateDir = Split-Path -Parent $TemplatePath
@@ -1322,12 +1359,13 @@ function Show-CountryInstallSummary {
         [string]$NationalUtcPath
     )
 
-    if (-not (Test-Path -LiteralPath $CountryConfigPath)) {
-        Write-WarnMsg "Country config file not found: $CountryConfigPath"
+    try {
+        $countryConfig = Load-CountryConfigResource -ResourcePath $CountryConfigPath
+    }
+    catch {
+        Write-WarnMsg ("Country server config unavailable: {0}" -f $_.Exception.Message)
         return
     }
-
-    $countryConfig = Get-Content -Raw -LiteralPath $CountryConfigPath | ConvertFrom-Json
 
     if ($Country -ne "Other") {
         Write-Ok "Country profile '$Country' is curated in ntp-country-servers.json and expected to work well."
@@ -1344,12 +1382,13 @@ function Show-CountryInstallSummary {
     Write-WarnMsg "Country '$cc' is not curated in ntp-country-servers.json. Pool-based servers should generally work."
     Write-Info "Country pool is usually preferred over region pool where available."
 
-    if (-not (Test-Path -LiteralPath $NationalUtcPath)) {
-        Write-WarnMsg "National UTC inventory file not found: $NationalUtcPath"
+    try {
+        $national = Load-NationalUtcInventoryResource -ResourcePath $NationalUtcPath
+    }
+    catch {
+        Write-WarnMsg ("National UTC inventory unavailable: {0}" -f $_.Exception.Message)
         return
     }
-
-    $national = Get-Content -Raw -LiteralPath $NationalUtcPath | ConvertFrom-Json
     $entry = @($national.entries | Where-Object { $_.country_code -ieq $cc } | Select-Object -First 1)
     if ($entry.Count -eq 0) {
         Write-WarnMsg "No national UTC/NTP metadata found for '$cc'."
@@ -1581,6 +1620,12 @@ catch {
 
 try {
     Assert-Admin
+
+    if ($script:RemoteDownloadsDisabled) {
+        Write-Host "" 
+        Write-Host "[OFFLINE MODE] Running with local files only (GitHub downloads disabled by user choice)." -ForegroundColor Yellow
+        Write-Host "" 
+    }
 
     Write-Step "Welcome to the NTP Installer"
     Write-Host "This guided installer can perform any or all of the following:" -ForegroundColor Cyan
