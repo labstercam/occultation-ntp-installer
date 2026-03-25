@@ -1,55 +1,180 @@
-#!/usr/bin/env python3
-"""Analyze NTP loopstats/peerstats logs and report timing accuracy interpretations.
+﻿#!/usr/bin/env ipy
+"""IronPython 3.4 Windows Forms tool to analyze NTP loopstats/peerstats timing accuracy.
 
-This script implements interpretations A, B, C, and D from docs/ntp_traceability.md.
-It is designed for Windows installs used by this repository but will run on any OS.
+This implements interpretations A, B, C, and D from docs/ntp_traceability.md.
 """
 
-import argparse
 import csv
 import json
 import math
 import os
 import re
-import statistics
 import sys
 from datetime import date, datetime, timedelta
-from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+
+try:
+    import clr  # type: ignore
+except ImportError:
+    clr = None
+
+if clr is not None:
+    clr.AddReference("System")
+    clr.AddReference("System.Drawing")
+    clr.AddReference("System.Windows.Forms")
+
+    drawing_module = __import__(
+        "System.Drawing",
+        fromlist=["Color", "Font", "FontStyle", "Pen", "Point", "Rectangle", "Size", "SolidBrush"],
+    )
+    forms_module = __import__(
+        "System.Windows.Forms",
+        fromlist=[
+            "AnchorStyles",
+            "Application",
+            "Button",
+            "BorderStyle",
+            "CheckBox",
+            "ColumnStyle",
+            "ComboBox",
+            "ComboBoxStyle",
+            "DialogResult",
+            "DockStyle",
+            "FixedPanel",
+            "FolderBrowserDialog",
+            "Form",
+            "FormWindowState",
+            "FormStartPosition",
+            "Label",
+            "MessageBox",
+            "MessageBoxButtons",
+            "MessageBoxIcon",
+            "PictureBox",
+            "RowStyle",
+            "ScrollBars",
+            "SizeType",
+            "SplitContainer",
+            "TableLayoutPanel",
+            "TextBox",
+        ],
+    )
+
+    Color = drawing_module.Color
+    Font = drawing_module.Font
+    FontStyle = drawing_module.FontStyle
+    Pen = drawing_module.Pen
+    Point = drawing_module.Point
+    Rectangle = drawing_module.Rectangle
+    Size = drawing_module.Size
+    SolidBrush = drawing_module.SolidBrush
+
+    AnchorStyles = forms_module.AnchorStyles
+    Application = forms_module.Application
+    Button = forms_module.Button
+    BorderStyle = forms_module.BorderStyle
+    CheckBox = forms_module.CheckBox
+    ComboBox = forms_module.ComboBox
+    ComboBoxStyle = forms_module.ComboBoxStyle
+    DialogResult = forms_module.DialogResult
+    FolderBrowserDialog = forms_module.FolderBrowserDialog
+    Form = forms_module.Form
+    FormWindowState = forms_module.FormWindowState
+    FormStartPosition = forms_module.FormStartPosition
+    Label = forms_module.Label
+    MessageBox = forms_module.MessageBox
+    MessageBoxButtons = forms_module.MessageBoxButtons
+    MessageBoxIcon = forms_module.MessageBoxIcon
+    PictureBox = forms_module.PictureBox
+    RowStyle = forms_module.RowStyle
+    ScrollBars = forms_module.ScrollBars
+    SizeType = forms_module.SizeType
+    SplitContainer = forms_module.SplitContainer
+    TableLayoutPanel = forms_module.TableLayoutPanel
+    TextBox = forms_module.TextBox
+    ColumnStyle = forms_module.ColumnStyle
+    DockStyle = forms_module.DockStyle
+    FixedPanel = forms_module.FixedPanel
+else:
+    Color = None
+    Font = None
+    FontStyle = None
+    Pen = None
+    Point = None
+    Rectangle = None
+    Size = None
+    SolidBrush = None
+    ColumnStyle = None
+    DockStyle = None
+    FixedPanel = None
+    RowStyle = None
+    SizeType = None
+    SplitContainer = None
+    TableLayoutPanel = None
+    AnchorStyles = None
+    Application = None
+    Button = None
+    BorderStyle = None
+    CheckBox = None
+    ComboBox = None
+    ComboBoxStyle = None
+    DialogResult = None
+    FolderBrowserDialog = None
+    Form = object
+    FormWindowState = None
+    FormStartPosition = None
+    Label = None
+    MessageBox = None
+    MessageBoxButtons = None
+    MessageBoxIcon = None
+    PictureBox = None
+    ScrollBars = None
+    TextBox = None
 
 
 MJD_EPOCH = date(1858, 11, 17)
 SQRT3 = math.sqrt(3.0)
-UI_WIDTH = 80
+
+# Color palette for server addresses (cycling through distinct colors)
+SERVER_COLORS = [
+    Color.FromArgb(31, 119, 180),    # blue
+    Color.FromArgb(255, 127, 14),    # orange
+    Color.FromArgb(44, 160, 44),     # green
+    Color.FromArgb(214, 39, 40),     # red
+    Color.FromArgb(148, 103, 189),   # purple
+    Color.FromArgb(140, 86, 75),     # brown
+    Color.FromArgb(227, 119, 194),   # pink
+    Color.FromArgb(127, 127, 127),   # gray
+]
+
+def get_server_color(server_address, server_to_color):
+    """Get or assign a color for a server address."""
+    if server_address not in server_to_color:
+        idx = len(server_to_color) % len(SERVER_COLORS)
+        server_to_color[server_address] = SERVER_COLORS[idx]
+    return server_to_color[server_address]
 
 
-class LoopRecord:
-    def __init__(self, mjd: int, offset: float, freq: float, jitter: float) -> None:
+class LoopRecord(object):
+    def __init__(self, mjd, sec_of_day, offset, freq, jitter):
         self.mjd = mjd
+        self.sec_of_day = sec_of_day
         self.offset = offset
         self.freq = freq
         self.jitter = jitter
 
 
-class PeerRecord:
-    def __init__(self, mjd: int, status: str, delay: float, dispersion: float, jitter: float) -> None:
+class PeerRecord(object):
+    def __init__(self, mjd, sec_of_day, status, delay, dispersion, jitter, server_address=""):
         self.mjd = mjd
+        self.sec_of_day = sec_of_day
         self.status = status
         self.delay = delay
         self.dispersion = dispersion
         self.jitter = jitter
+        self.server_address = server_address
 
 
-class DayOption:
-    def __init__(
-        self,
-        key: str,
-        label: str,
-        loop_path: Path,
-        peer_path: Path,
-        target_mjd: Optional[int],
-        recency_score: float,
-    ) -> None:
+class DayOption(object):
+    def __init__(self, key, label, loop_path, peer_path, target_mjd, recency_score):
         self.key = key
         self.label = label
         self.loop_path = loop_path
@@ -58,17 +183,18 @@ class DayOption:
         self.recency_score = recency_score
 
 
-class AnalysisResult:
+class AnalysisResult(object):
     def __init__(
         self,
-        option: DayOption,
-        mjds: List[int],
-        loop_rows_used: int,
-        peer_rows_total: int,
-        peer_rows_used: int,
-        peer_selection_note: str,
-        metrics: Dict[str, float],
-    ) -> None:
+        option,
+        mjds,
+        loop_rows_used,
+        peer_rows_total,
+        peer_rows_used,
+        peer_selection_note,
+        metrics,
+        diagnostics,
+    ):
         self.option = option
         self.mjds = mjds
         self.loop_rows_used = loop_rows_used
@@ -76,197 +202,128 @@ class AnalysisResult:
         self.peer_rows_used = peer_rows_used
         self.peer_selection_note = peer_selection_note
         self.metrics = metrics
+        self.diagnostics = diagnostics
 
 
-def mjd_to_date_string(mjd: int) -> str:
+def mjd_to_date_string(mjd):
     return (MJD_EPOCH + timedelta(days=mjd)).isoformat()
 
 
-def ui_rule(char: str = "=") -> None:
-    print(char * UI_WIDTH)
-
-
-def ui_header(title: str, subtitle: Optional[str] = None) -> None:
-    ui_rule("=")
-    print(title)
-    if subtitle:
-        print(subtitle)
-    ui_rule("=")
-
-
-def ui_section(title: str) -> None:
-    print()
-    ui_rule("-")
-
-
-def has_interactive_stdin() -> bool:
-    stream = getattr(sys, "stdin", None)
-    if stream is None:
-        return False
-    if not hasattr(stream, "readline"):
-        return False
-    isatty = getattr(stream, "isatty", None)
-    if callable(isatty):
-        try:
-            return bool(isatty())
-        except Exception:
-            return True
-    return True
-
-
-def safe_input(prompt: str) -> str:
-    # In some embedded hosts, input(prompt) can throw ValueError from host-side formatting.
+def has_stats_files(folder):
     try:
-        return input(prompt)
-    except ValueError:
-        print(prompt, end="")
-        try:
-            return input("")
-        except Exception:
-            stream = getattr(sys, "stdin", None) or getattr(sys, "__stdin__", None)
-            if stream is None or not hasattr(stream, "readline"):
-                raise RuntimeError(
-                    "Interactive input is not available in this host. "
-                    "Provide --log-folder (and optionally --day/--export-dir)."
-                )
-            line = stream.readline()
-            if line is None:
-                return ""
-            return line.rstrip("\r\n")
-    except EOFError:
-        raise RuntimeError(
-            "No stdin available for interactive prompts. "
-            "Provide --log-folder (and optionally --day/--export-dir)."
-        )
-    print(title)
-    ui_rule("-")
+        children = os.listdir(folder)
+    except OSError:
+        return False
 
-
-def prompt_with_default(prompt_text: str, default: Optional[str]) -> str:
-    suffix = ""
-    if default:
-        suffix = " [{0}]".format(default)
-    return safe_input("{0}{1}: ".format(prompt_text, suffix)).strip()
-
-
-def prompt_numbered_choice(prompt_text: str, item_count: int, default_index: int) -> int:
-    while True:
-        entry = prompt_with_default(prompt_text, str(default_index))
-        if not entry:
-            return default_index
-        if entry.isdigit():
-            picked = int(entry)
-            if 1 <= picked <= item_count:
-                return picked
-        print("Please enter a number from 1 to {0}.".format(item_count))
-
-
-def prompt_yes_no(prompt_text: str, default_yes: bool = False) -> bool:
-    default_hint = "Y/n" if default_yes else "y/N"
-    while True:
-        entry = safe_input("{0} [{1}]: ".format(prompt_text, default_hint)).strip().lower()
-        if not entry:
-            return default_yes
-        if entry in ("y", "yes"):
+    for child in children:
+        child_path = os.path.join(folder, child)
+        if not os.path.isfile(child_path):
+            continue
+        lower = child.lower()
+        if lower.startswith("loopstats") or lower.startswith("peerstats"):
             return True
-        if entry in ("n", "no"):
-            return False
-        print("Please answer yes or no.")
+    return False
 
 
-def discover_candidate_dirs() -> List[Path]:
+def discover_candidate_dirs():
     env = os.environ
-    roots: List[Path] = []
-
-    for key in ("ProgramData", "ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA", "APPDATA", "USERPROFILE"):
+    roots = []
+    for key in (
+        "PROGRAMDATA",
+        "ProgramData",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "LOCALAPPDATA",
+        "APPDATA",
+        "USERPROFILE",
+    ):
         value = env.get(key)
         if value:
-            roots.append(Path(value))
+            roots.append(value)
 
     known_relatives = [
-        Path("NTP") / "logs",
-        Path("NTP") / "etc",
-        Path("Meinberg") / "NTP" / "logs",
-        Path("Meinberg") / "NTP" / "etc",
+        os.path.join("NTP", "logs"),
+        os.path.join("NTP", "etc"),
+        os.path.join("Meinberg", "NTP", "logs"),
+        os.path.join("Meinberg", "NTP", "etc"),
     ]
 
-    candidates: List[Path] = []
-    seen: Set[str] = set()
+    candidates = []
+    seen = set()
 
-    def add_if_log_dir(path: Path) -> None:
-        resolved = str(path.resolve()) if path.exists() else str(path)
-        if resolved in seen:
+    def add_if_log_dir(path):
+        normalized = os.path.normcase(os.path.abspath(path))
+        if normalized in seen:
             return
-        if path.is_dir() and has_stats_files(path):
-            seen.add(resolved)
+        if os.path.isdir(path) and has_stats_files(path):
+            seen.add(normalized)
             candidates.append(path)
 
     for root in roots:
         for relative in known_relatives:
-            add_if_log_dir(root / relative)
+            add_if_log_dir(os.path.join(root, relative))
 
     explicit = env.get("NTP_LOG_DIR")
     if explicit:
-        add_if_log_dir(Path(explicit))
+        add_if_log_dir(explicit)
 
     return candidates
 
 
-def has_stats_files(folder: Path) -> bool:
+def get_settings_file_path():
+    base = (
+        os.environ.get("APPDATA")
+        or os.environ.get("LOCALAPPDATA")
+        or os.environ.get("USERPROFILE")
+        or os.path.expanduser("~")
+    )
+    if not base:
+        return os.path.join(os.getcwd(), "ntp_analyzer_settings.json")
+    settings_dir = os.path.join(base, "occultation-ntp-installer")
+    return os.path.join(settings_dir, "ntp_analyzer_settings.json")
+
+
+def load_folder_settings():
+    path = get_settings_file_path()
     try:
-        for child in folder.iterdir():
-            if not child.is_file():
-                continue
-            name = child.name.lower()
-            if name.startswith("loopstats") or name.startswith("peerstats"):
-                return True
-    except OSError:
-        return False
-    return False
+        handle = open(path, "r", encoding="utf-8")
+    except IOError:
+        return {}
+
+    try:
+        data = json.load(handle)
+    except Exception:
+        return {}
+    finally:
+        handle.close()
+
+    if not isinstance(data, dict):
+        return {}
+    return data
 
 
-def prompt_for_folder(preferred: Optional[Path], discovered: Iterable[Path]) -> Path:
-    discovered_list = list(discovered)
-    ui_section("NTP Log Folder Selection")
-    print("Choose a detected folder number, or type a full path.")
-    print("Press Enter to accept the default.")
-    print()
+def save_folder_settings(log_folder, export_folder):
+    path = get_settings_file_path()
+    parent = os.path.dirname(path)
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent)
 
-    if discovered_list:
-        print("Detected possible NTP log folders:")
-        for index, path in enumerate(discovered_list, start=1):
-            print("  {0}. {1}".format(index, path))
-    else:
-        print("No common NTP log folders were auto-detected.")
-
-    default = preferred if preferred else (discovered_list[0] if discovered_list else None)
-
-    while True:
-        default_text = str(default) if default else None
-        value = prompt_with_default("Enter NTP log folder", default_text).strip('"')
-
-        if not value and default:
-            chosen = default
-        elif value.isdigit() and discovered_list:
-            pick = int(value)
-            if 1 <= pick <= len(discovered_list):
-                chosen = discovered_list[pick - 1]
-            else:
-                print("Selection out of range.")
-                continue
-        else:
-            chosen = Path(value)
-
-        if chosen.is_dir():
-            return chosen
-        print(f"Folder not found: {chosen}")
+    payload = {
+        "log_folder": log_folder,
+        "export_folder": export_folder,
+    }
+    handle = open(path, "w", encoding="utf-8")
+    try:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+    finally:
+        handle.close()
 
 
-def extract_tag(name: str, prefix: str) -> str:
+def extract_tag(name, prefix):
     if not name.lower().startswith(prefix):
         return ""
 
-    remainder = name[len(prefix):]
+    remainder = name[len(prefix) :]
     if remainder.startswith("."):
         remainder = remainder[1:]
 
@@ -280,22 +337,48 @@ def extract_tag(name: str, prefix: str) -> str:
     return remainder
 
 
-def build_day_options(folder: Path) -> List[DayOption]:
-    loop_by_tag: Dict[str, Path] = {}
-    peer_by_tag: Dict[str, Path] = {}
+def read_available_mjds(path):
+    values = set()
+    try:
+        handle = open(path, "r")
+    except IOError:
+        return values
 
-    for child in folder.iterdir():
-        if not child.is_file():
+    try:
+        for line in handle:
+            text = line.strip()
+            if not text or text.startswith("#"):
+                continue
+            parts = text.split()
+            if not parts:
+                continue
+            try:
+                values.add(int(parts[0]))
+            except ValueError:
+                continue
+    finally:
+        handle.close()
+
+    return values
+
+
+def build_day_options(folder):
+    loop_by_tag = {}
+    peer_by_tag = {}
+
+    for child in os.listdir(folder):
+        child_path = os.path.join(folder, child)
+        if not os.path.isfile(child_path):
             continue
 
-        lower = child.name.lower()
+        lower = child.lower()
         if lower.startswith("loopstats"):
-            loop_by_tag[extract_tag(lower, "loopstats")] = child
+            loop_by_tag[extract_tag(lower, "loopstats")] = child_path
         elif lower.startswith("peerstats"):
-            peer_by_tag[extract_tag(lower, "peerstats")] = child
+            peer_by_tag[extract_tag(lower, "peerstats")] = child_path
 
-    options: List[DayOption] = []
-    common_tags = sorted(set(loop_by_tag).intersection(peer_by_tag))
+    options = []
+    common_tags = sorted(set(loop_by_tag.keys()).intersection(set(peer_by_tag.keys())))
 
     for tag in common_tags:
         loop_path = loop_by_tag[tag]
@@ -303,13 +386,13 @@ def build_day_options(folder: Path) -> List[DayOption]:
 
         label_tag = tag if tag else "(unsuffixed files)"
         if tag.isdigit() and len(tag) == 8:
-            label_tag = f"{tag[:4]}-{tag[4:6]}-{tag[6:]}"
+            label_tag = "%s-%s-%s" % (tag[:4], tag[4:6], tag[6:])
 
-        score = max(loop_path.stat().st_mtime, peer_path.stat().st_mtime)
+        score = max(os.path.getmtime(loop_path), os.path.getmtime(peer_path))
         options.append(
             DayOption(
-                key=f"tag:{tag}",
-                label=f"{label_tag}  [{loop_path.name}, {peer_path.name}]",
+                key="tag:%s" % tag,
+                label="%s  [%s, %s]" % (label_tag, os.path.basename(loop_path), os.path.basename(peer_path)),
                 loop_path=loop_path,
                 peer_path=peer_path,
                 target_mjd=None,
@@ -324,12 +407,14 @@ def build_day_options(folder: Path) -> List[DayOption]:
         peer_mjds = read_available_mjds(peer_path)
         common_mjds = sorted(loop_mjds.intersection(peer_mjds))
 
+        base_score = max(os.path.getmtime(loop_path), os.path.getmtime(peer_path))
         for mjd in common_mjds:
-            score = max(loop_path.stat().st_mtime, peer_path.stat().st_mtime) + (mjd / 1000000000.0)
+            score = base_score + (mjd / 1000000000.0)
             options.append(
                 DayOption(
-                    key=f"mjd:{mjd}",
-                    label=f"{mjd_to_date_string(mjd)} (MJD {mjd})  [{loop_path.name}, {peer_path.name}]",
+                    key="mjd:%d" % mjd,
+                    label="%s (MJD %d)  [%s, %s]"
+                    % (mjd_to_date_string(mjd), mjd, os.path.basename(loop_path), os.path.basename(peer_path)),
                     loop_path=loop_path,
                     peer_path=peer_path,
                     target_mjd=mjd,
@@ -341,53 +426,10 @@ def build_day_options(folder: Path) -> List[DayOption]:
     return options
 
 
-def read_available_mjds(path: Path) -> Set[int]:
-    values: Set[int] = set()
+def parse_loopstats(path, target_mjd):
+    rows = []
+    handle = open(path, "r")
     try:
-        with path.open("r", encoding="utf-8", errors="ignore") as handle:
-            for line in handle:
-                text = line.strip()
-                if not text or text.startswith("#"):
-                    continue
-                parts = text.split()
-                if not parts:
-                    continue
-                try:
-                    values.add(int(parts[0]))
-                except ValueError:
-                    continue
-    except OSError:
-        return set()
-    return values
-
-
-def select_day_option(options: List[DayOption], day_override: Optional[str]) -> DayOption:
-    if not options:
-        raise RuntimeError("No day options found. Ensure both loopstats and peerstats files exist in the folder.")
-
-    if day_override:
-        needle = day_override.strip().lower()
-        for option in options:
-            if needle in option.key.lower() or needle in option.label.lower():
-                return option
-        raise RuntimeError(f"Requested day '{day_override}' did not match available options.")
-
-    if not has_interactive_stdin():
-        return options[0]
-
-    ui_section("Day Dataset Selection")
-    print("Available day datasets (newest first):")
-    for index, option in enumerate(options, start=1):
-        print("  {0}. {1}".format(index, option.label))
-
-    default_index = 1
-    selected = prompt_numbered_choice("Select day dataset", len(options), default_index)
-    return options[selected - 1]
-
-
-def parse_loopstats(path: Path, target_mjd: Optional[int]) -> List[LoopRecord]:
-    rows: List[LoopRecord] = []
-    with path.open("r", encoding="utf-8", errors="ignore") as handle:
         for line in handle:
             text = line.strip()
             if not text or text.startswith("#"):
@@ -399,6 +441,7 @@ def parse_loopstats(path: Path, target_mjd: Optional[int]) -> List[LoopRecord]:
 
             try:
                 mjd = int(parts[0])
+                sec_of_day = float(parts[1])
                 offset = float(parts[2])
                 freq = float(parts[3])
                 jitter = float(parts[4])
@@ -408,14 +451,17 @@ def parse_loopstats(path: Path, target_mjd: Optional[int]) -> List[LoopRecord]:
             if target_mjd is not None and mjd != target_mjd:
                 continue
 
-            rows.append(LoopRecord(mjd=mjd, offset=offset, freq=freq, jitter=jitter))
+            rows.append(LoopRecord(mjd=mjd, sec_of_day=sec_of_day, offset=offset, freq=freq, jitter=jitter))
+    finally:
+        handle.close()
 
     return rows
 
 
-def parse_peerstats(path: Path, target_mjd: Optional[int]) -> List[PeerRecord]:
-    rows: List[PeerRecord] = []
-    with path.open("r", encoding="utf-8", errors="ignore") as handle:
+def parse_peerstats(path, target_mjd):
+    rows = []
+    handle = open(path, "r")
+    try:
         for line in handle:
             text = line.strip()
             if not text or text.startswith("#"):
@@ -427,6 +473,8 @@ def parse_peerstats(path: Path, target_mjd: Optional[int]) -> List[PeerRecord]:
 
             try:
                 mjd = int(parts[0])
+                sec_of_day = float(parts[1])
+                server_address = parts[2]
                 delay = float(parts[5])
                 dispersion = float(parts[6])
                 jitter = float(parts[7])
@@ -439,67 +487,240 @@ def parse_peerstats(path: Path, target_mjd: Optional[int]) -> List[PeerRecord]:
             rows.append(
                 PeerRecord(
                     mjd=mjd,
+                    sec_of_day=sec_of_day,
                     status=parts[3],
                     delay=delay,
                     dispersion=dispersion,
                     jitter=jitter,
+                    server_address=server_address,
                 )
             )
+    finally:
+        handle.close()
 
     return rows
 
 
-def is_selected_status(status_text: str) -> bool:
+def parse_status_word(status_text):
+    """Parse a peer status word.
+
+    NTP peerstats status is represented as a hex status word in this project
+    (for example: "9614"). Treating plain digits as decimal introduces
+    false classifications, so parse as hexadecimal by default.
+    """
     token = status_text.strip().lower()
-    candidates: List[int] = []
+    if not token:
+        return None
 
     try:
-        candidates.append(int(token, 16))
+        if token.startswith("0x"):
+            return int(token, 16)
+        return int(token, 16)
     except ValueError:
-        pass
-
-    if token.isdigit():
-        try:
-            candidates.append(int(token, 10))
-        except ValueError:
-            pass
-
-    return any((value & 0x0700) != 0 for value in candidates)
+        return None
 
 
-def mean(values: List[float]) -> float:
+def is_selected_status(status_text):
+    """Return True only for peers currently selected for synchronization.
+
+    Selection code is bits 8..10 of the peer status word:
+    - 6: sys.peer
+    - 7: pps.peer
+    """
+    value = parse_status_word(status_text)
+    if value is None:
+        return False
+    select_code = (value & 0x0700) >> 8
+    return select_code in (6, 7)
+
+
+def get_select_code(status_text):
+    value = parse_status_word(status_text)
+    if value is None:
+        return -1
+    return (value & 0x0700) >> 8
+
+
+def select_peer_subset(peer_rows):
+    selected_peers = [row for row in peer_rows if is_selected_status(row.status)]
+    if selected_peers:
+        note = "Selected peers by status flags: %d of %d rows" % (len(selected_peers), len(peer_rows))
+        return selected_peers, note
+    note = "No selected-peer status rows found; using all peerstats rows"
+    return peer_rows, note
+
+
+def reduce_to_active_timeline(peer_rows):
+    """Collapse rows to one active selected peer per timestamp for charting.
+
+    If multiple selected rows exist at the same rounded second, prefer
+    pps.peer (7) over sys.peer (6), then lower delay as a stable tie-breaker.
+    """
+    by_second = {}
+    for row in peer_rows:
+        key = (row.mjd, int(round(row.sec_of_day)))
+        code = get_select_code(row.status)
+        priority = 1 if code == 7 else 0
+        delay_value = row.delay
+        sort_key = (priority, -delay_value)
+
+        current = by_second.get(key)
+        if current is None:
+            by_second[key] = (sort_key, row)
+        else:
+            if sort_key > current[0]:
+                by_second[key] = (sort_key, row)
+
+    chosen = [entry[1] for key, entry in sorted(by_second.items(), key=lambda item: item[0])]
+    return chosen
+
+
+def compute_peer_diagnostics(peer_subset):
+    code_counts = {}
+    for row in peer_subset:
+        code = get_select_code(row.status)
+        code_counts[code] = code_counts.get(code, 0) + 1
+
+    active_rows = reduce_to_active_timeline(peer_subset)
+    transitions = 0
+    prev_server = None
+    for row in active_rows:
+        server = row.server_address if hasattr(row, "server_address") else ""
+        if prev_server is not None and server != prev_server:
+            transitions += 1
+        prev_server = server
+
+    return {
+        "select_code_counts": code_counts,
+        "active_rows": len(active_rows),
+        "active_transitions": transitions,
+        "active_unique_servers": len(set([(r.server_address if hasattr(r, "server_address") else "") for r in active_rows])),
+    }
+
+
+def to_utc_datetime(mjd, sec_of_day):
+    day = MJD_EPOCH + timedelta(days=mjd)
+    day_start = datetime(day.year, day.month, day.day)
+    return day_start + timedelta(seconds=float(sec_of_day))
+
+
+def aggregate_peer_timeseries(peer_rows):
+    """Aggregate peer measurements by second and server.
+    
+    Returns a list of aggregated records grouped by (mjd, second, server).
+    This allows per-server visualization when using aggregated data.
+    """
+    by_second_server = {}
+    for row in peer_rows:
+        second_key = int(round(row.sec_of_day))
+        server = row.server_address if hasattr(row, 'server_address') else ""
+        key = (row.mjd, second_key, server)
+        if key not in by_second_server:
+            by_second_server[key] = [0.0, 0.0, 0.0, 0]
+        by_second_server[key][0] += row.jitter
+        by_second_server[key][1] += row.dispersion
+        by_second_server[key][2] += row.delay
+        by_second_server[key][3] += 1
+
+    points = []
+    for key in sorted(by_second_server.keys()):
+        stats = by_second_server[key]
+        count = stats[3]
+        points.append(
+            {
+                "mjd": key[0],
+                "sec_of_day": key[1],
+                "server_address": key[2],
+                "jitter": stats[0] / float(count),
+                "dispersion": stats[1] / float(count),
+                "delay": stats[2] / float(count),
+            }
+        )
+    return points
+
+
+def compute_axis_day_bounds(loop_rows, peer_rows):
+    if not loop_rows and not peer_rows:
+        return None, None
+
+    all_mjds = [row.mjd for row in loop_rows] + [row.mjd for row in peer_rows]
+    min_mjd = min(all_mjds)
+    max_mjd = max(all_mjds)
+
+    start_day = MJD_EPOCH + timedelta(days=min_mjd)
+    end_day = MJD_EPOCH + timedelta(days=max_mjd + 1)
+    start = datetime(start_day.year, start_day.month, start_day.day, 0, 0, 0)
+    end = datetime(end_day.year, end_day.month, end_day.day, 0, 0, 0)
+    return start, end
+
+
+def mean(values):
     if not values:
         raise RuntimeError("Cannot compute mean of empty data.")
     return float(sum(values)) / float(len(values))
 
 
-def stdev(values: List[float]) -> float:
+def stdev(values):
     if len(values) < 2:
         return 0.0
-    return statistics.stdev(values)
+    avg = mean(values)
+    variance = sum((value - avg) * (value - avg) for value in values) / float(len(values) - 1)
+    return math.sqrt(variance)
 
 
-def format_ms(seconds: float) -> str:
-    return f"{seconds * 1000.0:.6f} ms"
+def format_ms(seconds):
+    return "%.6f ms" % (seconds * 1000.0)
 
 
-def format_us(seconds: float) -> str:
-    return f"{seconds * 1000000.0:.3f} us"
+def format_us(seconds):
+    return "%.3f us" % (seconds * 1000000.0)
 
 
-def analyze(option: DayOption, loop_rows: List[LoopRecord], peer_rows: List[PeerRecord]) -> AnalysisResult:
+def _choose_y_step_ms(span_ms):
+    """Return a nice round Y-axis tick interval (in ms) for the given data span."""
+    if span_ms <= 0:
+        return 1.0
+    # Candidate nice intervals in ms
+    nice = [
+        0.001, 0.002, 0.005,
+        0.01, 0.02, 0.05,
+        0.1, 0.2, 0.5,
+        1.0, 2.0, 5.0,
+        10.0, 20.0, 50.0,
+        100.0, 200.0, 500.0, 1000.0,
+    ]
+    for step in nice:
+        if span_ms / step <= 7:
+            return step
+    return nice[-1]
+
+
+def _format_y_label_ms(value_ms, step):
+    """Format a Y-axis tick value (ms) with precision matched to the tick step."""
+    if step >= 100.0:
+        return "%d ms" % int(round(value_ms))
+    elif step >= 10.0:
+        return "%d ms" % int(round(value_ms))
+    elif step >= 1.0:
+        return "%d ms" % int(round(value_ms))
+    elif step >= 0.1:
+        return "%.1f ms" % value_ms
+    elif step >= 0.01:
+        return "%.2f ms" % value_ms
+    elif step >= 0.001:
+        return "%.3f ms" % value_ms
+    else:
+        return "%.4f ms" % value_ms
+
+
+def analyze(option, loop_rows, peer_rows):
     if not loop_rows:
         raise RuntimeError("No usable loopstats rows were found for the selected day.")
     if not peer_rows:
         raise RuntimeError("No usable peerstats rows were found for the selected day.")
 
-    selected_peers = [row for row in peer_rows if is_selected_status(row.status)]
-    peer_subset = selected_peers if selected_peers else peer_rows
-    peer_selection_note = (
-        f"Selected peers by status flags: {len(selected_peers)} of {len(peer_rows)} rows"
-        if selected_peers
-        else "No selected-peer status rows found; using all peerstats rows"
-    )
+    peer_subset, peer_selection_note = select_peer_subset(peer_rows)
+    diagnostics = compute_peer_diagnostics(peer_subset)
 
     offsets = [row.offset for row in loop_rows]
     loop_jitter = [row.jitter for row in loop_rows]
@@ -515,17 +736,14 @@ def analyze(option: DayOption, loop_rows: List[LoopRecord], peer_rows: List[Peer
     mean_dispersion = mean(dispersions)
     mean_peer_jitter = mean(peer_jitter)
 
-    # Interpretation A
     a_uncertainty = math.sqrt(mean_offset_signed * mean_offset_signed + mean_delay * mean_delay)
 
-    # Interpretation B
     b_u_offset = mean_offset_abs / SQRT3
     b_u_delay = mean_half_delay / SQRT3
     b_u_server = 3e-6
     b_u_combined = math.sqrt(b_u_offset * b_u_offset + b_u_delay * b_u_delay + b_u_server * b_u_server)
     b_u_expanded = 2.0 * b_u_combined
 
-    # Interpretation C
     c_bias = mean_offset_signed
     c_u_wander = stdev(offsets)
     c_u_asymmetry = mean_half_delay / SQRT3
@@ -539,7 +757,6 @@ def analyze(option: DayOption, loop_rows: List[LoopRecord], peer_rows: List[Peer
     )
     c_u_expanded = 2.0 * c_u_combined
 
-    # Interpretation D
     d_u_jitter = mean_loop_jitter
     d_u_dispersion = mean_dispersion
     d_u_asymmetry = mean_half_delay / SQRT3
@@ -552,7 +769,7 @@ def analyze(option: DayOption, loop_rows: List[LoopRecord], peer_rows: List[Peer
     )
     d_u_expanded = 2.0 * d_u_combined
 
-    mjds = sorted({row.mjd for row in loop_rows}.union({row.mjd for row in peer_rows}))
+    mjds = sorted(set([row.mjd for row in loop_rows] + [row.mjd for row in peer_rows]))
 
     metrics = {
         "mean_offset_signed": mean_offset_signed,
@@ -587,84 +804,107 @@ def analyze(option: DayOption, loop_rows: List[LoopRecord], peer_rows: List[Peer
         peer_rows_used=len(peer_subset),
         peer_selection_note=peer_selection_note,
         metrics=metrics,
+        diagnostics=diagnostics,
     )
 
 
-def generate_report(result: AnalysisResult) -> str:
-    date_text = ", ".join(f"{mjd_to_date_string(mjd)} (MJD {mjd})" for mjd in result.mjds)
+def generate_report(result):
+    date_text = ", ".join(["%s (MJD %d)" % (mjd_to_date_string(mjd), mjd) for mjd in result.mjds])
     option = result.option
     m = result.metrics
+    d = result.diagnostics
+
+    code_counts = d.get("select_code_counts", {})
+    code_6 = code_counts.get(6, 0)
+    code_7 = code_counts.get(7, 0)
+    code_other = 0
+    for code_value, count in code_counts.items():
+        if code_value not in (6, 7):
+            code_other += count
 
     lines = [
         "NTP Timing Accuracy Report",
         "=" * 80,
-        f"Dataset: {option.label}",
-        f"Loopstats file: {option.loop_path}",
-        f"Peerstats file: {option.peer_path}",
-        f"Day(s) present in selected data: {date_text}",
-        f"Loopstats rows used: {result.loop_rows_used}",
-        f"Peerstats rows used: {result.peer_rows_used} ({result.peer_selection_note})",
+        "Dataset: %s" % option.label,
+        "Loopstats file: %s" % option.loop_path,
+        "Peerstats file: %s" % option.peer_path,
+        "Day(s) present in selected data: %s" % date_text,
+        "Loopstats rows used: %d" % result.loop_rows_used,
+        "Peerstats rows used: %d (%s)" % (result.peer_rows_used, result.peer_selection_note),
+        "",
+        "Selected Peer Diagnostics",
+        "-" * 80,
+        "Select code 6 (sys.peer) rows: %d" % code_6,
+        "Select code 7 (pps.peer) rows: %d" % code_7,
+        "Other select codes in subset: %d" % code_other,
+        "Active timeline rows (1 peer per second): %d" % d.get("active_rows", 0),
+        "Active source transitions: %d" % d.get("active_transitions", 0),
+        "Unique active servers: %d" % d.get("active_unique_servers", 0),
         "",
         "Interpretation A (literal reading)",
         "-" * 80,
-        f"Mean signed loop offset: {format_ms(m['mean_offset_signed'])}",
-        f"Mean peer delay (RTT): {format_ms(m['mean_delay'])}",
-        f"Quadrature sum: {format_ms(m['a_uncertainty'])}",
+        "Mean signed loop offset: %s" % format_ms(m["mean_offset_signed"]),
+        "Mean peer delay (RTT): %s" % format_ms(m["mean_delay"]),
+        "Quadrature sum: %s" % format_ms(m["a_uncertainty"]),
         "",
         "Interpretation B (metrological)",
         "-" * 80,
-        f"u_offset = mean(abs(offset))/sqrt(3): {format_ms(m['b_u_offset'])}",
-        f"u_delay = (mean(delay)/2)/sqrt(3): {format_ms(m['b_u_delay'])}",
-        f"u_server (fixed): {format_us(m['b_u_server'])}",
-        f"u_combined (k=1): {format_ms(m['b_u_combined'])}",
-        f"U_expanded (k=2): +/- {format_ms(m['b_u_expanded'])}",
+        "u_offset = mean(abs(offset))/sqrt(3): %s" % format_ms(m["b_u_offset"]),
+        "u_delay = (mean(delay)/2)/sqrt(3): %s" % format_ms(m["b_u_delay"]),
+        "u_server (fixed): %s" % format_us(m["b_u_server"]),
+        "u_combined (k=1): %s" % format_ms(m["b_u_combined"]),
+        "U_expanded (k=2): +/- %s" % format_ms(m["b_u_expanded"]),
         "",
         "Interpretation C (statistical)",
         "-" * 80,
-        f"Systematic bias (mean signed offset): {format_ms(m['c_bias'])}",
-        f"u_wander = stdev(offset): {format_ms(m['c_u_wander'])}",
-        f"u_asymmetry = (mean(delay)/2)/sqrt(3): {format_ms(m['c_u_asymmetry'])}",
-        f"u_delay_variation = stdev(delay)/2: {format_ms(m['c_u_delay_variation'])}",
-        f"u_server (rectangular): {format_us(m['c_u_server'])}",
-        f"u_combined (k=1): {format_ms(m['c_u_combined'])}",
-        f"U_expanded (k=2): +/- {format_ms(m['c_u_expanded'])}",
+        "Systematic bias (mean signed offset): %s" % format_ms(m["c_bias"]),
+        "u_wander = stdev(offset): %s" % format_ms(m["c_u_wander"]),
+        "u_asymmetry = (mean(delay)/2)/sqrt(3): %s" % format_ms(m["c_u_asymmetry"]),
+        "u_delay_variation = stdev(delay)/2: %s" % format_ms(m["c_u_delay_variation"]),
+        "u_server (rectangular): %s" % format_us(m["c_u_server"]),
+        "u_combined (k=1): %s" % format_ms(m["c_u_combined"]),
+        "U_expanded (k=2): +/- %s" % format_ms(m["c_u_expanded"]),
         "",
         "Interpretation D (NTP native statistics)",
         "-" * 80,
-        f"u_jitter (loopstats mean jitter): {format_ms(m['d_u_jitter'])}",
-        f"u_dispersion (peerstats mean dispersion): {format_ms(m['d_u_dispersion'])}",
-        f"u_peer_jitter (informational): {format_ms(m['d_u_peer_jitter'])}",
-        f"u_asymmetry = (mean(delay)/2)/sqrt(3): {format_ms(m['d_u_asymmetry'])}",
-        f"u_server (rectangular): {format_us(m['d_u_server'])}",
-        f"u_combined (k=1): {format_ms(m['d_u_combined'])}",
-        f"U_expanded (k=2): +/- {format_ms(m['d_u_expanded'])}",
+        "u_jitter (loopstats mean jitter): %s" % format_ms(m["d_u_jitter"]),
+        "u_dispersion (peerstats mean dispersion): %s" % format_ms(m["d_u_dispersion"]),
+        "u_peer_jitter (informational): %s" % format_ms(m["d_u_peer_jitter"]),
+        "u_asymmetry = (mean(delay)/2)/sqrt(3): %s" % format_ms(m["d_u_asymmetry"]),
+        "u_server (rectangular): %s" % format_us(m["d_u_server"]),
+        "u_combined (k=1): %s" % format_ms(m["d_u_combined"]),
+        "U_expanded (k=2): +/- %s" % format_ms(m["d_u_expanded"]),
     ]
 
-    return "\n".join(lines)
+    return "\r\n".join(lines)
 
 
-def sanitize_filename_part(value: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("_") or "dataset"
+def sanitize_filename_part(value):
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("_")
+    return sanitized or "dataset"
 
 
-def resolve_export_paths(export_dir: Path, result: AnalysisResult) -> Tuple[Path, Path]:
-    export_dir.mkdir(parents=True, exist_ok=True)
+def resolve_export_paths(export_dir, result):
+    if not os.path.isdir(export_dir):
+        os.makedirs(export_dir)
+
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if result.mjds:
         day_part = sanitize_filename_part(mjd_to_date_string(max(result.mjds)))
     else:
         day_part = "unknown_day"
-    base = export_dir / f"ntp_accuracy_{day_part}_{stamp}"
-    return base.with_suffix(".json"), base.with_suffix(".csv")
+
+    base = os.path.join(export_dir, "ntp_accuracy_%s_%s" % (day_part, stamp))
+    return base + ".json", base + ".csv"
 
 
-def export_json(path: Path, result: AnalysisResult) -> None:
+def export_json(path, result):
     generated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     payload = {
         "generated_at": generated_at,
         "dataset_label": result.option.label,
-        "loopstats_file": str(result.option.loop_path),
-        "peerstats_file": str(result.option.peer_path),
+        "loopstats_file": result.option.loop_path,
+        "peerstats_file": result.option.peer_path,
         "mjd_days": result.mjds,
         "iso_days": [mjd_to_date_string(mjd) for mjd in result.mjds],
         "loop_rows_used": result.loop_rows_used,
@@ -672,12 +912,17 @@ def export_json(path: Path, result: AnalysisResult) -> None:
         "peer_rows_used": result.peer_rows_used,
         "peer_selection_note": result.peer_selection_note,
         "metrics_seconds": result.metrics,
+        "diagnostics": result.diagnostics,
     }
-    with path.open("w", encoding="utf-8") as handle:
+
+    handle = open(path, "w", encoding="utf-8")
+    try:
         json.dump(payload, handle, indent=2, sort_keys=True)
+    finally:
+        handle.close()
 
 
-def export_csv(path: Path, result: AnalysisResult) -> None:
+def export_csv(path, result):
     generated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     columns = [
         "generated_at",
@@ -690,103 +935,974 @@ def export_csv(path: Path, result: AnalysisResult) -> None:
         "peer_rows_total",
         "peer_rows_used",
         "peer_selection_note",
+        "diag_select_code_6",
+        "diag_select_code_7",
+        "diag_select_code_other",
+        "diag_active_rows",
+        "diag_active_transitions",
+        "diag_active_unique_servers",
     ] + sorted(result.metrics.keys())
 
     row = {
         "generated_at": generated_at,
         "dataset_label": result.option.label,
-        "loopstats_file": str(result.option.loop_path),
-        "peerstats_file": str(result.option.peer_path),
-        "mjd_days": ";".join(str(mjd) for mjd in result.mjds),
-        "iso_days": ";".join(mjd_to_date_string(mjd) for mjd in result.mjds),
+        "loopstats_file": result.option.loop_path,
+        "peerstats_file": result.option.peer_path,
+        "mjd_days": ";".join([str(mjd) for mjd in result.mjds]),
+        "iso_days": ";".join([mjd_to_date_string(mjd) for mjd in result.mjds]),
         "loop_rows_used": str(result.loop_rows_used),
         "peer_rows_total": str(result.peer_rows_total),
         "peer_rows_used": str(result.peer_rows_used),
         "peer_selection_note": result.peer_selection_note,
     }
-    for key, value in result.metrics.items():
-        row[key] = f"{value:.12f}"
 
-    with path.open("w", encoding="utf-8", newline="") as handle:
+    diag = result.diagnostics or {}
+    code_counts = diag.get("select_code_counts", {})
+    code_other = 0
+    for code_value, count in code_counts.items():
+        if code_value not in (6, 7):
+            code_other += count
+
+    row["diag_select_code_6"] = str(code_counts.get(6, 0))
+    row["diag_select_code_7"] = str(code_counts.get(7, 0))
+    row["diag_select_code_other"] = str(code_other)
+    row["diag_active_rows"] = str(diag.get("active_rows", 0))
+    row["diag_active_transitions"] = str(diag.get("active_transitions", 0))
+    row["diag_active_unique_servers"] = str(diag.get("active_unique_servers", 0))
+
+    for key, value in result.metrics.items():
+        row[key] = "%.12f" % value
+
+    handle = open(path, "w", newline="", encoding="utf-8")
+    try:
         writer = csv.DictWriter(handle, fieldnames=columns)
         writer.writeheader()
         writer.writerow(row)
+    finally:
+        handle.close()
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Analyze NTP timing accuracy for one day of loopstats/peerstats logs.")
-    parser.add_argument("--log-folder", dest="log_folder", help="Path to folder containing loopstats/peerstats files.")
-    parser.add_argument(
-        "--day",
-        dest="day",
-        help="Optional day selector (e.g. 20260319, MJD value, or text matching an option label).",
-    )
-    parser.add_argument(
-        "--export-dir",
-        dest="export_dir",
-        help="If set, save a JSON and CSV audit record in this folder.",
-    )
-    return parser.parse_args()
+class AnalyzerForm(Form):
+    def __init__(self):
+        self.Text = "NTP Timing Accuracy Analyzer"
+        self.Size = Size(1600, 960)
+        self.MinimumSize = Size(1100, 700)
+        self.StartPosition = FormStartPosition.CenterScreen
+        self.WindowState = FormWindowState.Maximized
+
+        self._options_by_label = {}
+        self._plot_data = {}
+
+        default_font = Font("Segoe UI", 9)
+        bold_font = Font("Segoe UI", 9, FontStyle.Bold)
+
+        split = SplitContainer()
+        split.Dock = DockStyle.Fill
+        split.FixedPanel = FixedPanel.Panel1
+        split.SplitterWidth = 6
+        self.Controls.Add(split)
+        self._main_split = split
+        self.Shown += self.on_form_shown
+        split.Panel1.Resize += self.on_left_panel_resize
+
+        lp = split.Panel1
+
+        self.lbl_title = Label()
+        self.lbl_title.Text = "NTP Timing Accuracy - Interpretations A, B, C, D"
+        self.lbl_title.Font = Font("Segoe UI", 11, FontStyle.Bold)
+        self.lbl_title.Location = Point(8, 8)
+        self.lbl_title.Size = Size(440, 26)
+        self.lbl_title.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        lp.Controls.Add(self.lbl_title)
+
+        self.lbl_log = Label()
+        self.lbl_log.Text = "NTP log folder:"
+        self.lbl_log.Font = bold_font
+        self.lbl_log.Location = Point(8, 44)
+        self.lbl_log.Size = Size(200, 20)
+        lp.Controls.Add(self.lbl_log)
+
+        self.txt_log_folder = TextBox()
+        self.txt_log_folder.Font = default_font
+        self.txt_log_folder.Location = Point(8, 66)
+        self.txt_log_folder.Size = Size(446, 24)
+        self.txt_log_folder.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        lp.Controls.Add(self.txt_log_folder)
+
+        self.btn_browse_log = Button()
+        self.btn_browse_log.Text = "Browse..."
+        self.btn_browse_log.Location = Point(8, 96)
+        self.btn_browse_log.Size = Size(100, 28)
+        self.btn_browse_log.Click += self.on_browse_log
+        lp.Controls.Add(self.btn_browse_log)
+
+        self.btn_scan = Button()
+        self.btn_scan.Text = "Scan Datasets"
+        self.btn_scan.Location = Point(114, 96)
+        self.btn_scan.Size = Size(120, 28)
+        self.btn_scan.Click += self.on_scan
+        lp.Controls.Add(self.btn_scan)
+
+        self.lbl_filter = Label()
+        self.lbl_filter.Text = "Day filter (optional text / MJD / YYYYMMDD):"
+        self.lbl_filter.Location = Point(8, 136)
+        self.lbl_filter.Size = Size(440, 20)
+        lp.Controls.Add(self.lbl_filter)
+
+        self.txt_day_filter = TextBox()
+        self.txt_day_filter.Location = Point(8, 158)
+        self.txt_day_filter.Size = Size(328, 24)
+        self.txt_day_filter.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        lp.Controls.Add(self.txt_day_filter)
+
+        self.btn_apply_filter = Button()
+        self.btn_apply_filter.Text = "Apply Filter"
+        self.btn_apply_filter.Location = Point(342, 156)
+        self.btn_apply_filter.Size = Size(112, 28)
+        self.btn_apply_filter.Anchor = AnchorStyles.Top | AnchorStyles.Right
+        self.btn_apply_filter.Click += self.on_scan
+        lp.Controls.Add(self.btn_apply_filter)
+
+        self.lbl_dataset = Label()
+        self.lbl_dataset.Text = "Dataset:"
+        self.lbl_dataset.Font = bold_font
+        self.lbl_dataset.Location = Point(8, 198)
+        self.lbl_dataset.Size = Size(200, 20)
+        lp.Controls.Add(self.lbl_dataset)
+
+        self.cmb_dataset = ComboBox()
+        self.cmb_dataset.DropDownStyle = ComboBoxStyle.DropDownList
+        self.cmb_dataset.Location = Point(8, 220)
+        self.cmb_dataset.Size = Size(446, 24)
+        self.cmb_dataset.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        lp.Controls.Add(self.cmb_dataset)
+
+        self.chk_export = CheckBox()
+        self.chk_export.Text = "Export JSON + CSV"
+        self.chk_export.Location = Point(8, 258)
+        self.chk_export.Size = Size(160, 24)
+        self.chk_export.Checked = True
+        self.chk_export.CheckedChanged += self.on_export_toggle
+        lp.Controls.Add(self.chk_export)
+
+        self.txt_export_folder = TextBox()
+        self.txt_export_folder.Location = Point(8, 284)
+        self.txt_export_folder.Size = Size(328, 24)
+        self.txt_export_folder.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        lp.Controls.Add(self.txt_export_folder)
+
+        self.btn_browse_export = Button()
+        self.btn_browse_export.Text = "Browse..."
+        self.btn_browse_export.Location = Point(342, 282)
+        self.btn_browse_export.Size = Size(112, 28)
+        self.btn_browse_export.Anchor = AnchorStyles.Top | AnchorStyles.Right
+        self.btn_browse_export.Click += self.on_browse_export
+        lp.Controls.Add(self.btn_browse_export)
+
+        self.chk_raw_peer_points = CheckBox()
+        self.chk_raw_peer_points.Text = "Charts: raw peer points"
+        self.chk_raw_peer_points.Location = Point(8, 320)
+        self.chk_raw_peer_points.Size = Size(228, 24)
+        self.chk_raw_peer_points.Checked = False
+        lp.Controls.Add(self.chk_raw_peer_points)
+
+        self.btn_analyze = Button()
+        self.btn_analyze.Text = "Analyze"
+        self.btn_analyze.Font = bold_font
+        self.btn_analyze.Location = Point(342, 316)
+        self.btn_analyze.Size = Size(112, 32)
+        self.btn_analyze.Anchor = AnchorStyles.Top | AnchorStyles.Right
+        self.btn_analyze.Click += self.on_analyze
+        lp.Controls.Add(self.btn_analyze)
+
+        self.txt_output = TextBox()
+        self.txt_output.Multiline = True
+        self.txt_output.ScrollBars = ScrollBars.Both
+        self.txt_output.ReadOnly = True
+        self.txt_output.Font = Font("Consolas", 9)
+        self.txt_output.Location = Point(8, 358)
+        self.txt_output.Size = Size(446, 510)
+        self.txt_output.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+        lp.Controls.Add(self.txt_output)
+
+        self.lbl_status = Label()
+        self.lbl_status.Text = "Ready."
+        self.lbl_status.Location = Point(8, 880)
+        self.lbl_status.Size = Size(446, 22)
+        self.lbl_status.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+        lp.Controls.Add(self.lbl_status)
+
+        tbl = TableLayoutPanel()
+        tbl.Dock = DockStyle.Fill
+        tbl.RowCount = 4
+        tbl.ColumnCount = 1
+        tbl.RowStyles.Clear()
+        for _ in range(4):
+            tbl.RowStyles.Add(RowStyle(SizeType.Percent, 25.0))
+        tbl.ColumnStyles.Clear()
+        tbl.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0))
+        split.Panel2.Controls.Add(tbl)
+
+        self.chart_delay = self.create_plot_panel("Delay (Peerstats)", Point(0, 0), Size(100, 100), "delay")
+        self.chart_delay.Dock = DockStyle.Fill
+        tbl.Controls.Add(self.chart_delay, 0, 0)
+
+        self.chart_offset = self.create_plot_panel("Offset (Loopstats)", Point(0, 0), Size(100, 100), "offset")
+        self.chart_offset.Dock = DockStyle.Fill
+        tbl.Controls.Add(self.chart_offset, 0, 1)
+
+        self.chart_jitter = self.create_plot_panel("Jitter (Loopstats / Peerstats)", Point(0, 0), Size(100, 100), "jitter")
+        self.chart_jitter.Dock = DockStyle.Fill
+        tbl.Controls.Add(self.chart_jitter, 0, 2)
+
+        self.chart_dispersion = self.create_plot_panel("Dispersion (Peerstats)", Point(0, 0), Size(100, 100), "dispersion")
+        self.chart_dispersion.Dock = DockStyle.Fill
+        tbl.Controls.Add(self.chart_dispersion, 0, 3)
+
+        self.prefill_defaults()
+
+    def set_status(self, text):
+        self.lbl_status.Text = text
+
+    def on_form_shown(self, sender, event):
+        # SplitterDistance is only valid after the control has a real width.
+        split = self._main_split
+        available_width = split.ClientSize.Width
+        if available_width <= 0:
+            return
+
+        # Compute how much width the left panel actually needs after DPI scaling.
+        required_right = 0
+        for ctrl in split.Panel1.Controls:
+            if not ctrl.Visible:
+                continue
+            required_right = max(required_right, int(ctrl.Right))
+
+        # Add breathing room so right-anchored controls (Analyze/Browse) stay visible.
+        preferred = max(640, required_right + 18)
+
+        desired_left_min = 420
+        desired_right_min = 500
+
+        # If the current width cannot satisfy both desired mins, scale them down.
+        if available_width < (desired_left_min + desired_right_min):
+            left_min = max(120, int(available_width * 0.35))
+            right_min = max(120, available_width - left_min - 1)
+            if right_min < 120:
+                right_min = 120
+                left_min = max(120, available_width - right_min - 1)
+        else:
+            left_min = desired_left_min
+            right_min = desired_right_min
+
+        split.Panel1MinSize = left_min
+        split.Panel2MinSize = right_min
+
+        min_left = split.Panel1MinSize
+        max_left = available_width - split.Panel2MinSize
+
+        # Clamp to the valid runtime range to avoid WinForms SystemError.
+        if max_left < min_left:
+            left_width = min_left
+        else:
+            left_width = max(min_left, min(preferred, max_left))
+
+        try:
+            split.SplitterDistance = left_width
+        except Exception:
+            # Ignore one-time layout race conditions on some WinForms runtimes.
+            pass
+
+        self.adjust_left_panel_layout()
+
+    def on_left_panel_resize(self, sender, event):
+        self.adjust_left_panel_layout()
+
+    def adjust_left_panel_layout(self):
+        panel = self._main_split.Panel1
+        panel_width = panel.ClientSize.Width
+        if panel_width <= 0:
+            return
+
+        margin = 8
+        inter = 7  # ~20% more vertical separation than the previous 6 px spacing
+        label_h = 22
+        text_h = 24
+        button_h = 34  # ~20% taller than the previous 28 px buttons
+        analyze_h = 38
+        full_w = max(120, panel_width - (margin * 2))
+
+        y = 8
+
+        self.lbl_title.Location = Point(margin, y)
+        self.lbl_title.Size = Size(full_w, 28)
+        y += 28 + inter
+
+        self.lbl_log.Location = Point(margin, y)
+        self.lbl_log.Size = Size(full_w, label_h)
+        y += label_h
+
+        self.txt_log_folder.Location = Point(margin, y)
+        self.txt_log_folder.Size = Size(full_w, text_h)
+        y += text_h + inter
+
+        btn_gap = 6
+        browse_w = 100
+        scan_w = 120
+        self.btn_browse_log.Location = Point(margin, y)
+        self.btn_browse_log.Size = Size(browse_w, button_h)
+        self.btn_scan.Location = Point(margin + browse_w + btn_gap, y)
+        self.btn_scan.Size = Size(scan_w, button_h)
+        y += button_h + inter
+
+        self.lbl_filter.Location = Point(margin, y)
+        self.lbl_filter.Size = Size(full_w, label_h)
+        y += label_h
+
+        apply_w = 112
+        filter_gap = 6
+        if full_w >= (apply_w + 150 + filter_gap):
+            filter_w = max(120, full_w - apply_w - filter_gap)
+            self.txt_day_filter.Location = Point(margin, y)
+            self.txt_day_filter.Size = Size(filter_w, text_h)
+            self.btn_apply_filter.Location = Point(margin + filter_w + filter_gap, y - 1)
+            self.btn_apply_filter.Size = Size(apply_w, button_h)
+            y += max(text_h, button_h) + inter
+        else:
+            self.txt_day_filter.Location = Point(margin, y)
+            self.txt_day_filter.Size = Size(full_w, text_h)
+            y += text_h + 4
+            self.btn_apply_filter.Location = Point(margin, y)
+            self.btn_apply_filter.Size = Size(apply_w, button_h)
+            y += button_h + inter
+
+        self.lbl_dataset.Location = Point(margin, y)
+        self.lbl_dataset.Size = Size(full_w, label_h)
+        y += label_h
+
+        self.cmb_dataset.Location = Point(margin, y)
+        self.cmb_dataset.Size = Size(full_w, text_h)
+        y += text_h + inter
+
+        self.chk_export.Location = Point(margin, y)
+        self.chk_export.Size = Size(min(220, full_w), text_h)
+        y += text_h
+
+        analyze_w = 112
+        browse_export_w = 112
+        controls_gap = 6
+        one_row_min = browse_export_w + analyze_w + 160 + controls_gap * 2
+        two_row_min = browse_export_w + analyze_w + controls_gap
+
+        if full_w >= one_row_min:
+            export_w = max(120, full_w - browse_export_w - analyze_w - controls_gap * 2)
+            self.txt_export_folder.Location = Point(margin, y)
+            self.txt_export_folder.Size = Size(export_w, text_h)
+
+            bx = margin + export_w + controls_gap
+            self.btn_browse_export.Location = Point(bx, y - 1)
+            self.btn_browse_export.Size = Size(browse_export_w, button_h)
+
+            ax = bx + browse_export_w + controls_gap
+            self.btn_analyze.Location = Point(ax, y - 3)
+            self.btn_analyze.Size = Size(analyze_w, analyze_h)
+            y += max(text_h, analyze_h) + inter
+        elif full_w >= two_row_min:
+            self.txt_export_folder.Location = Point(margin, y)
+            self.txt_export_folder.Size = Size(full_w, text_h)
+            y += text_h + 4
+
+            self.btn_browse_export.Location = Point(margin, y)
+            self.btn_browse_export.Size = Size(browse_export_w, button_h)
+            self.btn_analyze.Location = Point(margin + browse_export_w + controls_gap, y - 2)
+            self.btn_analyze.Size = Size(analyze_w, analyze_h)
+            y += max(button_h, analyze_h) + inter
+        else:
+            self.txt_export_folder.Location = Point(margin, y)
+            self.txt_export_folder.Size = Size(full_w, text_h)
+            y += text_h + 4
+
+            self.btn_browse_export.Location = Point(margin, y)
+            self.btn_browse_export.Size = Size(browse_export_w, button_h)
+            y += button_h + 4
+
+            self.btn_analyze.Location = Point(margin, y)
+            self.btn_analyze.Size = Size(analyze_w, analyze_h)
+            y += analyze_h + inter
+
+        self.chk_raw_peer_points.Location = Point(margin, y)
+        self.chk_raw_peer_points.Size = Size(min(260, full_w), text_h)
+
+        content_top = self.chk_raw_peer_points.Bottom + inter
+        status_height = 24
+        output_height = max(120, panel.ClientSize.Height - content_top - status_height)
+        self.txt_output.Location = Point(margin, content_top)
+        self.txt_output.Size = Size(full_w, output_height)
+        self.lbl_status.Location = Point(margin, panel.ClientSize.Height - status_height)
+        self.lbl_status.Size = Size(full_w, status_height)
+
+    def create_plot_panel(self, title, location, size, plot_key):
+        container = Label()
+        container.Text = title
+        container.Font = Font("Segoe UI", 9, FontStyle.Bold)
+        container.Location = location
+        container.Size = size
+        container.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+
+        header_h = 30
+
+        if plot_key == "jitter":
+            legend_y = 4
+            legend_font = Font("Segoe UI", 8)
+            start_x = 300
+            center_y = int(header_h / 2)
+
+            loop_swatch = Label()
+            loop_swatch.BackColor = Color.FromArgb(255, 127, 14)
+            loop_swatch.BorderStyle = BorderStyle.FixedSingle
+            loop_swatch.Location = Point(start_x, center_y - 2)
+            loop_swatch.Size = Size(18, 5)
+            container.Controls.Add(loop_swatch)
+
+            loop_label = Label()
+            loop_label.Text = "Loop (Local) Jitter"
+            loop_label.Font = legend_font
+            loop_label.Location = Point(start_x + 22, legend_y - 1)
+            loop_label.Size = Size(150, 20)
+            container.Controls.Add(loop_label)
+
+            peer_x = start_x + 210
+            peer_swatch = Label()
+            peer_swatch.BackColor = Color.FromArgb(44, 160, 44)
+            peer_swatch.BorderStyle = BorderStyle.FixedSingle
+            peer_swatch.Location = Point(peer_x, center_y - 1)
+            peer_swatch.Size = Size(14, 3)
+            container.Controls.Add(peer_swatch)
+
+            peer_label = Label()
+            peer_label.Text = "Peer (Network) Jitter"
+            peer_label.Font = legend_font
+            peer_label.Location = Point(peer_x + 18, legend_y - 1)
+            peer_label.Size = Size(180, 20)
+            container.Controls.Add(peer_label)
+        elif plot_key == "delay":
+            # Server legend for delay chart is rendered in the header container.
+            self._delay_legend_controls = []
+
+        plot_box = PictureBox()
+        plot_box.Location = Point(0, header_h)
+        plot_box.Size = Size(size.Width, size.Height - header_h)
+        plot_box.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+        plot_box.BorderStyle = BorderStyle.FixedSingle
+        plot_box.BackColor = Color.White
+        plot_box.Tag = plot_key
+        plot_box.Paint += self.on_plot_paint
+        container.Controls.Add(plot_box)
+        return container
+
+    def update_delay_header_legend(self, server_to_color, unique_servers):
+        if not hasattr(self, "chart_delay") or self.chart_delay is None:
+            return
+
+        # Remove prior dynamic delay legend controls.
+        old_controls = getattr(self, "_delay_legend_controls", [])
+        for ctrl in old_controls:
+            try:
+                self.chart_delay.Controls.Remove(ctrl)
+                ctrl.Dispose()
+            except Exception:
+                pass
+        self._delay_legend_controls = []
+
+        if not unique_servers:
+            return
+
+        legend_font = Font("Segoe UI", 8)
+        legend_y = 4
+        start_x = 300
+        center_y = 15
+        x_pos = start_x
+
+        for server in unique_servers:
+            if x_pos > self.chart_delay.ClientSize.Width - 110:
+                break
+
+            swatch = Label()
+            swatch.BackColor = server_to_color.get(server, Color.Gray)
+            swatch.BorderStyle = BorderStyle.FixedSingle
+            swatch.Location = Point(x_pos, center_y - 2)
+            swatch.Size = Size(18, 5)
+            self.chart_delay.Controls.Add(swatch)
+            self._delay_legend_controls.append(swatch)
+
+            label = Label()
+            label.Text = server if server else "Unknown"
+            label.Font = legend_font
+            label.Location = Point(x_pos + 22, legend_y - 1)
+            label.Size = Size(90, 20)
+            self.chart_delay.Controls.Add(label)
+            self._delay_legend_controls.append(label)
+
+            x_pos += 116
+
+    def _get_plot_box(self, container):
+        for ctrl in container.Controls:
+            if isinstance(ctrl, PictureBox):
+                return ctrl
+        return None
+
+    def invalidate_plots(self):
+        for container in (self.chart_delay, self.chart_offset, self.chart_jitter, self.chart_dispersion):
+            plot_box = self._get_plot_box(container)
+            if plot_box is not None:
+                plot_box.Invalidate()
+
+    def on_plot_paint(self, sender, event):
+        plot_key = sender.Tag
+        chart_data = self._plot_data.get(plot_key)
+        if chart_data is None:
+            self.draw_empty_plot(event.Graphics, sender.ClientRectangle)
+            return
+        chart_data["plot_key"] = plot_key  # Pass plot_key to draw_plot
+        self.draw_plot(event.Graphics, sender.ClientRectangle, chart_data)
+
+    def draw_empty_plot(self, graphics, bounds):
+        graphics.Clear(Color.White)
+        brush = SolidBrush(Color.Gray)
+        try:
+            graphics.DrawString("Run Analyze to draw data.", Font("Segoe UI", 9), brush, 8, 8)
+        finally:
+            brush.Dispose()
+
+    def draw_plot(self, graphics, bounds, chart_data):
+        graphics.Clear(Color.White)
+
+        left = 62
+        top = 8
+        right = 6
+        bottom = 22
+        width = max(10, bounds.Width - left - right)
+        height = max(10, bounds.Height - top - bottom)
+
+        plot_rect = Rectangle(left, top, width, height)
+
+        x_start = chart_data["x_start"]
+        x_end = chart_data["x_end"]
+        y_min = chart_data["y_min"]   # ms
+        y_max = chart_data["y_max"]   # ms
+        y_step = chart_data["y_step"] # ms
+        
+        plot_key = chart_data.get("plot_key", "")
+        
+        # For delay chart, build series from delay points with server coloring
+        if plot_key == "delay":
+            delay_points = chart_data.get("points", [])
+            server_to_color = chart_data.get("server_to_color", {})
+            unique_servers = chart_data.get("unique_servers", [])
+            
+            # Build series with server-colored segments
+            series = [
+                {
+                    "name": "Delay (Server color-coded)",
+                    "points": delay_points,  # (timestamp, delay, server) tuples
+                    "server_to_color": server_to_color,
+                    "colored": True,
+                    "unique_servers": unique_servers,
+                }
+            ]
+        else:
+            series = chart_data.get("series", [])
+
+        one_hour = timedelta(hours=1)
+        h_grid_pen = Pen(Color.FromArgb(220, 220, 220))   # faint horizontal gridlines
+        v_grid_pen = Pen(Color.FromArgb(228, 228, 228))   # faint vertical gridlines
+        zero_pen = Pen(Color.FromArgb(150, 150, 150))     # zero reference
+        axis_pen = Pen(Color.FromArgb(100, 100, 100))     # axis border
+        label_brush = SolidBrush(Color.FromArgb(80, 80, 80))
+        label_font = Font("Segoe UI", 7)
+        try:
+            # --- Vertical x-gridlines (hourly) ---
+            hour = x_start
+            while hour <= x_end:
+                x = self.map_x(hour, x_start, x_end, plot_rect)
+                graphics.DrawLine(v_grid_pen, x, plot_rect.Top, x, plot_rect.Bottom)
+                if hour.hour % 2 == 0:
+                    graphics.DrawString(hour.strftime("%H:%M"), label_font, label_brush, x - 14, plot_rect.Bottom + 2)
+                hour = hour + one_hour
+
+            # --- Horizontal y-gridlines and tick labels ---
+            num_ticks = int(round((y_max - y_min) / y_step)) + 1
+            for i in range(num_ticks):
+                y_val = y_min + i * y_step
+                py = self.map_y(y_val, y_min, y_max, plot_rect)
+                if plot_rect.Top <= py <= plot_rect.Bottom:
+                    is_zero = abs(y_val) < y_step * 1e-4
+                    if is_zero:
+                        graphics.DrawLine(zero_pen, plot_rect.Left, py, plot_rect.Right, py)
+                    else:
+                        graphics.DrawLine(h_grid_pen, plot_rect.Left, py, plot_rect.Right, py)
+                    lbl = _format_y_label_ms(y_val, y_step)
+                    lbl_y = max(plot_rect.Top, min(plot_rect.Bottom - 10, py - 6))
+                    graphics.DrawString(lbl, label_font, label_brush, 2, lbl_y)
+
+            # --- Axis border ---
+            graphics.DrawRectangle(axis_pen, plot_rect)
+            graphics.DrawString("UTC", label_font, label_brush, plot_rect.Right - 24, plot_rect.Bottom + 2)
+
+            # --- Data series ---
+            for item in series:
+                points = item["points"]
+                if len(points) < 1:
+                    continue
+
+                # Check if this is a server-colored series (for delay chart)
+                if item.get("colored", False):
+                    # Draw delay line with server-based color segments
+                    server_to_color = item.get("server_to_color", {})
+                    prev_xy = None
+                    prev_server = None
+                    
+                    for point_data in points:
+                        dt_value = point_data[0]
+                        y_value = point_data[1]
+                        server = point_data[2] if len(point_data) > 2 else ""
+                        
+                        x = self.map_x(dt_value, x_start, x_end, plot_rect)
+                        y_ms = y_value * 1000.0
+                        y = self.map_y(y_ms, y_min, y_max, plot_rect)
+                        
+                        if prev_xy is not None:
+                            # Color each segment by the active source server at the
+                            # previous point; color changes where source changes.
+                            segment_color = server_to_color.get(prev_server, Color.Gray)
+                            segment_pen = Pen(segment_color, 2)
+                            try:
+                                graphics.DrawLine(segment_pen, prev_xy[0], prev_xy[1], x, y)
+                            finally:
+                                segment_pen.Dispose()
+                        prev_xy = (x, y)
+                        prev_server = server
+                else:
+                    # Normal single-color series
+                    line_pen = Pen(item["color"], item.get("width", 2))
+                    try:
+                        prev_xy = None
+                        for dt_value, y_value in points:
+                            x = self.map_x(dt_value, x_start, x_end, plot_rect)
+                            y_ms = y_value * 1000.0
+                            y = self.map_y(y_ms, y_min, y_max, plot_rect)
+                            if prev_xy is not None:
+                                graphics.DrawLine(line_pen, prev_xy[0], prev_xy[1], x, y)
+                            prev_xy = (x, y)
+                    finally:
+                        line_pen.Dispose()
+
+        finally:
+            h_grid_pen.Dispose()
+            v_grid_pen.Dispose()
+            zero_pen.Dispose()
+            axis_pen.Dispose()
+            label_brush.Dispose()
+            label_font.Dispose()
+
+    def map_x(self, dt_value, x_start, x_end, rect):
+        total = (x_end - x_start).total_seconds()
+        if total <= 0:
+            return rect.Left
+        offset = (dt_value - x_start).total_seconds()
+        return int(rect.Left + (float(offset) / float(total)) * rect.Width)
+
+    def map_y(self, value, y_min, y_max, rect):
+        span = y_max - y_min
+        if span <= 0:
+            return rect.Top + int(rect.Height / 2)
+        ratio = (float(value) - float(y_min)) / float(span)
+        return int(rect.Bottom - ratio * rect.Height)
+
+    def update_charts(self, loop_rows, peer_rows, use_raw_peer_points):
+        x_start, x_end = compute_axis_day_bounds(loop_rows, peer_rows)
+        if x_start is None or x_end is None:
+            self._plot_data = {}
+            self.update_delay_header_legend({}, [])
+            self.invalidate_plots()
+            return
+
+        offset_points = []
+        loop_jitter_points = []
+        for row in sorted(loop_rows, key=lambda value: (value.mjd, value.sec_of_day)):
+            stamp = to_utc_datetime(row.mjd, row.sec_of_day)
+            offset_points.append((stamp, row.offset))
+            loop_jitter_points.append((stamp, row.jitter))
+
+        peer_jitter_points = []
+        dispersion_points = []
+        delay_points = []  # List of (timestamp, delay, server) tuples
+        server_to_color = {}  # Server address -> Color object
+        
+        if use_raw_peer_points:
+            peer_source = sorted(peer_rows, key=lambda value: (value.mjd, value.sec_of_day))
+            for row in peer_source:
+                stamp = to_utc_datetime(row.mjd, row.sec_of_day)
+                peer_jitter_points.append((stamp, row.jitter))
+                dispersion_points.append((stamp, row.dispersion))
+                
+                server = row.server_address if hasattr(row, 'server_address') else ""
+                get_server_color(server, server_to_color)
+                delay_points.append((stamp, row.delay, server))
+        else:
+            peer_source = aggregate_peer_timeseries(peer_rows)
+            for row in peer_source:
+                stamp = to_utc_datetime(row["mjd"], row["sec_of_day"])
+                peer_jitter_points.append((stamp, row["jitter"]))
+                dispersion_points.append((stamp, row["dispersion"]))
+                
+                server = row.get("server_address", "")
+                get_server_color(server, server_to_color)
+                delay_points.append((stamp, row["delay"], server))
+
+        def y_limits_ms(series_list):
+            """Compute y_min, y_max, y_step in ms for a list of point series (values in seconds).
+            Always spans zero; snapped to a nice tick interval."""
+            values_ms = []
+            for points in series_list:
+                values_ms.extend([v * 1000.0 for _, v in points])
+            if not values_ms:
+                return -1.0, 1.0, 1.0
+            raw_min = min(values_ms)
+            raw_max = max(values_ms)
+            # Always bracket zero
+            lo = min(raw_min, 0.0)
+            hi = max(raw_max, 0.0)
+            span = hi - lo
+            if span == 0.0:
+                lo -= 0.5
+                hi += 0.5
+                span = 1.0
+            step = _choose_y_step_ms(span)
+            # Snap outward to step boundaries
+            y_min = math.floor(lo / step) * step
+            y_max = math.ceil(hi / step) * step
+            # Ensure at least 2 ticks of range
+            if y_max - y_min < step * 2:
+                y_max = y_min + step * 2
+            return y_min, y_max, step
+
+        offset_min, offset_max, offset_step = y_limits_ms([offset_points])
+        jitter_min, jitter_max, jitter_step = y_limits_ms([loop_jitter_points, peer_jitter_points])
+        disp_min, disp_max, disp_step = y_limits_ms([dispersion_points])
+        # For delay points, extract just the values (second element of tuple)
+        delay_values_only = [(dt, val) for dt, val, srv in delay_points]
+        delay_min, delay_max, delay_step = y_limits_ms([delay_values_only])
+
+        # Get unique servers for legend
+        unique_servers = sorted(set(srv for _, _, srv in delay_points))
+        self.update_delay_header_legend(server_to_color, unique_servers)
+
+        self._plot_data = {
+            "delay": {
+                "x_start": x_start,
+                "x_end": x_end,
+                "y_min": delay_min,
+                "y_max": delay_max,
+                "y_step": delay_step,
+                "points": delay_points,  # List of (timestamp, delay, server) tuples
+                "server_to_color": server_to_color,
+                "unique_servers": unique_servers,
+            },
+            "offset": {
+                "x_start": x_start,
+                "x_end": x_end,
+                "y_min": offset_min,
+                "y_max": offset_max,
+                "y_step": offset_step,
+                "series": [
+                    {"name": "Offset", "color": Color.FromArgb(31, 119, 180), "points": offset_points},
+                ],
+            },
+            "jitter": {
+                "x_start": x_start,
+                "x_end": x_end,
+                "y_min": jitter_min,
+                "y_max": jitter_max,
+                "y_step": jitter_step,
+                "series": [
+                    {
+                        "name": "Loop Jitter",
+                        "color": Color.FromArgb(255, 127, 14),
+                        "width": 3,
+                        "points": loop_jitter_points,
+                    },
+                    {
+                        "name": "Peer Jitter",
+                        "color": Color.FromArgb(44, 160, 44),
+                        "width": 2,
+                        "points": peer_jitter_points,
+                    },
+                ],
+            },
+            "dispersion": {
+                "x_start": x_start,
+                "x_end": x_end,
+                "y_min": disp_min,
+                "y_max": disp_max,
+                "y_step": disp_step,
+                "series": [
+                    {"name": "Dispersion", "color": Color.FromArgb(214, 39, 40), "points": dispersion_points},
+                ],
+            },
+        }
+
+        self.invalidate_plots()
+
+    def prefill_defaults(self):
+        saved = load_folder_settings()
+        saved_log = saved.get("log_folder", "").strip()
+        saved_export = saved.get("export_folder", "").strip()
+
+        if saved_log and os.path.isdir(saved_log):
+            self.txt_log_folder.Text = saved_log
+            if saved_export:
+                self.txt_export_folder.Text = saved_export
+            else:
+                self.txt_export_folder.Text = os.path.join(saved_log, "reports")
+        else:
+            candidates = discover_candidate_dirs()
+            if candidates:
+                self.txt_log_folder.Text = candidates[0]
+                self.txt_export_folder.Text = os.path.join(candidates[0], "reports")
+
+        if not self.txt_export_folder.Text.strip() and self.txt_log_folder.Text.strip():
+            self.txt_export_folder.Text = os.path.join(self.txt_log_folder.Text.strip(), "reports")
+        self.on_export_toggle(None, None)
+        self.scan_options()
+
+    def show_error(self, message):
+        MessageBox.Show(self, message, "NTP Analyzer", MessageBoxButtons.OK, MessageBoxIcon.Error)
+
+    def choose_folder(self, current_path):
+        dialog = FolderBrowserDialog()
+        if current_path and os.path.isdir(current_path):
+            dialog.SelectedPath = current_path
+        if dialog.ShowDialog(self) == DialogResult.OK:
+            return dialog.SelectedPath
+        return None
+
+    def on_browse_log(self, sender, event):
+        chosen = self.choose_folder(self.txt_log_folder.Text.strip())
+        if chosen:
+            self.txt_log_folder.Text = chosen
+            if not self.txt_export_folder.Text.strip():
+                self.txt_export_folder.Text = os.path.join(chosen, "reports")
+            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+            self.scan_options()
+
+    def on_browse_export(self, sender, event):
+        chosen = self.choose_folder(self.txt_export_folder.Text.strip())
+        if chosen:
+            self.txt_export_folder.Text = chosen
+            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+
+    def on_export_toggle(self, sender, event):
+        enabled = self.chk_export.Checked
+        self.txt_export_folder.Enabled = enabled
+        self.btn_browse_export.Enabled = enabled
+
+    def on_scan(self, sender, event):
+        save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+        self.scan_options()
+
+    def scan_options(self):
+        log_folder = self.txt_log_folder.Text.strip().strip('"')
+        self.cmb_dataset.Items.Clear()
+        self._options_by_label = {}
+
+        if not log_folder:
+            self.set_status("Set an NTP log folder, then scan datasets.")
+            return
+
+        if not os.path.isdir(log_folder):
+            self.set_status("Log folder does not exist.")
+            return
+
+        try:
+            options = build_day_options(log_folder)
+        except Exception as error:
+            self.show_error("Failed to scan datasets:\n%s" % str(error))
+            self.set_status("Scan failed.")
+            return
+
+        filter_text = self.txt_day_filter.Text.strip().lower()
+        if filter_text:
+            options = [o for o in options if filter_text in o.key.lower() or filter_text in o.label.lower()]
+
+        if not options:
+            self.set_status("No matching loopstats/peerstats datasets found.")
+            return
+
+        for option in options:
+            self.cmb_dataset.Items.Add(option.label)
+            self._options_by_label[option.label] = option
+
+        self.cmb_dataset.SelectedIndex = 0
+        self.set_status("Loaded %d dataset option(s)." % len(options))
+
+    def get_selected_option(self):
+        selected_label = self.cmb_dataset.Text
+        if not selected_label:
+            raise RuntimeError("No dataset selected.")
+        option = self._options_by_label.get(selected_label)
+        if option is None:
+            raise RuntimeError("Dataset selection is invalid. Please rescan datasets.")
+        return option
+
+    def on_analyze(self, sender, event):
+        try:
+            option = self.get_selected_option()
+            loop_rows = parse_loopstats(option.loop_path, option.target_mjd)
+            peer_rows = parse_peerstats(option.peer_path, option.target_mjd)
+            result = analyze(option, loop_rows, peer_rows)
+            peer_subset, _ignore_note = select_peer_subset(peer_rows)
+            chart_peer_rows = reduce_to_active_timeline(peer_subset)
+            report = generate_report(result)
+            self.txt_output.Text = report
+            self.update_charts(loop_rows, chart_peer_rows, self.chk_raw_peer_points.Checked)
+
+            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+
+            if self.chk_export.Checked:
+                export_folder = self.txt_export_folder.Text.strip().strip('"')
+                if not export_folder:
+                    raise RuntimeError("Export folder is empty. Set an export folder or uncheck export.")
+                json_path, csv_path = resolve_export_paths(export_folder, result)
+                export_json(json_path, result)
+                export_csv(csv_path, result)
+                self.set_status("Analysis complete. Saved JSON: %s | CSV: %s" % (json_path, csv_path))
+            else:
+                self.set_status("Analysis complete.")
+
+        except Exception as error:
+            self.show_error(str(error))
+            self.set_status("Analysis failed.")
 
 
-def main() -> int:
-    args = parse_args()
-
-    ui_header("NTP Timing Accuracy Analyzer", "Interpretations A, B, C, and D")
-
-    discovered = discover_candidate_dirs()
-    preferred = Path(args.log_folder) if args.log_folder else None
-    if preferred:
-        if not preferred.is_dir():
-            raise RuntimeError("Specified --log-folder does not exist: {0}".format(preferred))
-        log_folder = preferred
-    elif has_interactive_stdin():
-        log_folder = prompt_for_folder(preferred, discovered)
-    else:
-        raise RuntimeError(
-            "No interactive stdin available to ask for log folder. "
-            "Please run with --log-folder <path>."
+def main():
+    if clr is None:
+        sys.stderr.write(
+            "This script requires IronPython 3.4 on Windows (clr/System.Windows.Forms not available).\n"
         )
+        return 1
 
-    options = build_day_options(log_folder)
-    if not options:
-        raise RuntimeError(
-            f"No matching loopstats/peerstats datasets found in {log_folder}. "
-            "Expected files such as loopstats.20260319 and peerstats.20260319 or unsuffixed loopstats/peerstats files."
+    if sys.version_info[0] != 3 or sys.version_info[1] < 4:
+        sys.stderr.write(
+            "This script targets IronPython 3.4+. Current Python: %d.%d\n"
+            % (sys.version_info[0], sys.version_info[1])
         )
+        return 1
 
-    selected = select_day_option(options, args.day)
-    loop_rows = parse_loopstats(selected.loop_path, selected.target_mjd)
-    peer_rows = parse_peerstats(selected.peer_path, selected.target_mjd)
-    result = analyze(selected, loop_rows, peer_rows)
-
-    print()
-    print(generate_report(result))
-
-    export_dir = args.export_dir
-    if not export_dir and has_interactive_stdin() and prompt_yes_no("Save JSON and CSV audit files?", default_yes=False):
-        default_export = str(log_folder / "reports")
-        entered = prompt_with_default("Export folder", default_export).strip().strip('"')
-        export_dir = entered if entered else default_export
-
-    if export_dir:
-        export_root = Path(export_dir)
-        json_path, csv_path = resolve_export_paths(export_root, result)
-        export_json(json_path, result)
-        export_csv(csv_path, result)
-        print()
-        ui_section("Export Complete")
-        print(f"Saved JSON: {json_path}")
-        print(f"Saved CSV:  {csv_path}")
+    Application.EnableVisualStyles()
+    Application.Run(AnalyzerForm())
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except KeyboardInterrupt:
-        print("\nCancelled by user.")
-        raise SystemExit(130)
-    except RuntimeError as error:
-        print(f"Error: {error}")
-        raise SystemExit(1)
+    main()
