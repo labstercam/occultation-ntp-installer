@@ -1143,7 +1143,7 @@ class AnalyzerForm(Form):
         tbl.ColumnStyles.Add(ColumnStyle(SizeType.Percent, 100.0))
         split.Panel2.Controls.Add(tbl)
 
-        self.chart_delay = self.create_plot_panel("Delay (Peerstats)", Point(0, 0), Size(100, 100), "delay")
+        self.chart_delay = self.create_plot_panel("Delay (Peerstats selected server, loop timeline)", Point(0, 0), Size(100, 100), "delay")
         self.chart_delay.Dock = DockStyle.Fill
         tbl.Controls.Add(self.chart_delay, 0, 0)
 
@@ -1419,7 +1419,7 @@ class AnalyzerForm(Form):
 
         legend_font = Font("Segoe UI", 8)
         legend_y = 4
-        start_x = 300
+        start_x = 460
         center_y = 15
         x_pos = start_x
 
@@ -1627,6 +1627,8 @@ class AnalyzerForm(Form):
             self.invalidate_plots()
             return
 
+        selected_peer_rows, _note = select_peer_subset(peer_rows)
+
         offset_points = []
         loop_jitter_points = []
         for row in sorted(loop_rows, key=lambda value: (value.mjd, value.sec_of_day)):
@@ -1636,29 +1638,95 @@ class AnalyzerForm(Form):
 
         peer_jitter_points = []
         dispersion_points = []
-        delay_points = []  # List of (timestamp, delay, server) tuples
         server_to_color = {}  # Server address -> Color object
-        
-        if use_raw_peer_points:
-            peer_source = sorted(peer_rows, key=lambda value: (value.mjd, value.sec_of_day))
-            for row in peer_source:
-                stamp = to_utc_datetime(row.mjd, row.sec_of_day)
-                peer_jitter_points.append((stamp, row.jitter))
-                dispersion_points.append((stamp, row.dispersion))
-                
-                server = row.server_address if hasattr(row, 'server_address') else ""
-                get_server_color(server, server_to_color)
-                delay_points.append((stamp, row.delay, server))
-        else:
-            peer_source = aggregate_peer_timeseries(peer_rows)
-            for row in peer_source:
-                stamp = to_utc_datetime(row["mjd"], row["sec_of_day"])
-                peer_jitter_points.append((stamp, row["jitter"]))
-                dispersion_points.append((stamp, row["dispersion"]))
-                
-                server = row.get("server_address", "")
-                get_server_color(server, server_to_color)
-                delay_points.append((stamp, row["delay"], server))
+
+        # Build selected-peer timeline from peerstats for server coloring.
+        # Reduce to one active selected server per second.
+        selected_timeline_rows = reduce_to_active_timeline(selected_peer_rows)
+        peer_timeline = []
+        for row in selected_timeline_rows:
+            stamp = to_utc_datetime(row.mjd, row.sec_of_day)
+            server = row.server_address if hasattr(row, "server_address") else ""
+            get_server_color(server, server_to_color)
+            peer_timeline.append((stamp, server))
+
+        # Dispersion is densified later on the loop timeline (same approach
+        # as selected-server delay/jitter), so do not append sparse points here.
+
+        # Delay chart is sampled on the loopstats timeline, but value is the
+        # true peerstats delay of the active selected server.
+        delay_points = []  # List of (timestamp, selected_server_delay, server) tuples
+
+        # Build per-server raw delay/jitter/dispersion streams from full peer rows.
+        delays_by_server = {}
+        jitters_by_server = {}
+        dispersions_by_server = {}
+        for row in sorted(peer_rows, key=lambda value: (value.mjd, value.sec_of_day)):
+            stamp = to_utc_datetime(row.mjd, row.sec_of_day)
+            server = row.server_address if hasattr(row, "server_address") else ""
+            if server not in delays_by_server:
+                delays_by_server[server] = []
+            if server not in jitters_by_server:
+                jitters_by_server[server] = []
+            if server not in dispersions_by_server:
+                dispersions_by_server[server] = []
+            delays_by_server[server].append((stamp, row.delay))
+            jitters_by_server[server].append((stamp, row.jitter))
+            dispersions_by_server[server].append((stamp, row.dispersion))
+
+        delay_index_by_server = {}
+        jitter_index_by_server = {}
+        dispersion_index_by_server = {}
+        for server in delays_by_server.keys():
+            delay_index_by_server[server] = -1
+        for server in jitters_by_server.keys():
+            jitter_index_by_server[server] = -1
+        for server in dispersions_by_server.keys():
+            dispersion_index_by_server[server] = -1
+
+        timeline_index = 0
+        active_server = ""
+        if peer_timeline:
+            active_server = peer_timeline[0][1]
+
+        for row in sorted(loop_rows, key=lambda value: (value.mjd, value.sec_of_day)):
+            stamp = to_utc_datetime(row.mjd, row.sec_of_day)
+            while timeline_index + 1 < len(peer_timeline) and peer_timeline[timeline_index + 1][0] <= stamp:
+                timeline_index += 1
+                active_server = peer_timeline[timeline_index][1]
+
+            # Carry-forward latest delay from the active selected server.
+            server_delays = delays_by_server.get(active_server, [])
+            if server_delays:
+                idx = delay_index_by_server.get(active_server, -1)
+                while idx + 1 < len(server_delays) and server_delays[idx + 1][0] <= stamp:
+                    idx += 1
+                delay_index_by_server[active_server] = idx
+                if idx >= 0:
+                    delay_points.append((stamp, server_delays[idx][1], active_server))
+
+            # Carry-forward latest jitter from the active selected server.
+            server_jitters = jitters_by_server.get(active_server, [])
+            if server_jitters:
+                j_idx = jitter_index_by_server.get(active_server, -1)
+                while j_idx + 1 < len(server_jitters) and server_jitters[j_idx + 1][0] <= stamp:
+                    j_idx += 1
+                jitter_index_by_server[active_server] = j_idx
+                if j_idx >= 0:
+                    peer_jitter_points.append((stamp, server_jitters[j_idx][1]))
+
+            # Carry-forward latest dispersion from the active selected server.
+            server_dispersions = dispersions_by_server.get(active_server, [])
+            if server_dispersions:
+                d_idx = dispersion_index_by_server.get(active_server, -1)
+                while d_idx + 1 < len(server_dispersions) and server_dispersions[d_idx + 1][0] <= stamp:
+                    d_idx += 1
+                dispersion_index_by_server[active_server] = d_idx
+                if d_idx >= 0:
+                    dispersion_points.append((stamp, server_dispersions[d_idx][1]))
+
+        if not server_to_color:
+            get_server_color("", server_to_color)
 
         def y_limits_ms(series_list):
             """Compute y_min, y_max, y_step in ms for a list of point series (values in seconds).
@@ -1694,8 +1762,10 @@ class AnalyzerForm(Form):
         delay_values_only = [(dt, val) for dt, val, srv in delay_points]
         delay_min, delay_max, delay_step = y_limits_ms([delay_values_only])
 
-        # Get unique servers for legend
-        unique_servers = sorted(set(srv for _, _, srv in delay_points))
+        # Get unique selected servers for legend
+        unique_servers = sorted(set([srv for _stamp, srv in peer_timeline]))
+        if not unique_servers and delay_points:
+            unique_servers = sorted(set([srv for _stamp, _value, srv in delay_points]))
         self.update_delay_header_legend(server_to_color, unique_servers)
 
         self._plot_data = {
@@ -1862,10 +1932,9 @@ class AnalyzerForm(Form):
             peer_rows = parse_peerstats(option.peer_path, option.target_mjd)
             result = analyze(option, loop_rows, peer_rows)
             peer_subset, _ignore_note = select_peer_subset(peer_rows)
-            chart_peer_rows = reduce_to_active_timeline(peer_subset)
             report = generate_report(result)
             self.txt_output.Text = report
-            self.update_charts(loop_rows, chart_peer_rows, self.chk_raw_peer_points.Checked)
+            self.update_charts(loop_rows, peer_rows, self.chk_raw_peer_points.Checked)
 
             save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
 
