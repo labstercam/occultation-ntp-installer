@@ -12,7 +12,7 @@
 # GPS PPS / NMEA source from serial COM port
 # Change the final octet in 127.127.20.X to match COM port number.
 # minpoll/maxpoll only apply to the NMEA sentences, not to the PPS signal
-server 127.127.20.{{COM_PORT}} mode {{MODE}} minpoll 4 maxpoll 4 prefer
+server 127.127.20.{{COM_PORT}} mode {{MODE}} minpoll 6 maxpoll 7 prefer
 fudge 127.127.20.{{COM_PORT}} flag1 1 flag2 1 refid GPS
 
 # >>> NTP_GUIDED_MANAGED_LOGGING_START

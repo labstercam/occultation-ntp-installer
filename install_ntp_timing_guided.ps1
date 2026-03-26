@@ -1736,23 +1736,38 @@ function Read-CountrySelection {
 }
 
 function Read-GpsModeInteractive {
-    param([int]$CurrentMode = 18)
+    param(
+        [int]$CurrentMode = 17,
+        [bool]$NmeaOnly = $false
+    )
 
-    Write-Info "GPS mode controls how serial GPS data is interpreted."
-    if (Read-YesNo -Prompt "Use recommended GPS mode (18)?" -DefaultYes $true) {
-        return 18
+    Write-Info "GPS mode controls the serial baud rate and how serial GPS data is interpreted."
+
+    if ($NmeaOnly) {
+        Write-Info "For NMEA-only receivers, modes 1 (4800 baud) or 17 (9600 baud) are recommended."
+        Write-Info "NMEA data works most reliably at these lower baud rates."
+        if (Read-YesNo -Prompt "Use recommended GPS mode 17 (9600 baud)?" -DefaultYes $true) {
+            return 17
+        }
+        Write-Host "Alternative recommended value: 1 (4800 baud)" -ForegroundColor Yellow
+    }
+    else {
+        if (Read-YesNo -Prompt "Use recommended GPS mode 17 (9600 baud)?" -DefaultYes $true) {
+            return 17
+        }
     }
 
-    Write-Host "Advanced mode values: 2, 18, 34, 50, 66, 82" -ForegroundColor Yellow
-    Write-Host "If unsure, use 18." -ForegroundColor Yellow
+    Write-Host "All mode values (4800 or 9600 baud recommended for NMEA): 1, 17, 33, 49, 65, 81" -ForegroundColor Yellow
+    Write-Host "Corresponding baud rates: 4800, 9600, 19200, 38400, 57600, 115200" -ForegroundColor Yellow
+    Write-Host "If unsure, use 17." -ForegroundColor Yellow
 
     while ($true) {
         $modeRaw = Read-Host "Enter GPS mode value"
-        if ($modeRaw -match '^(2|18|34|50|66|82)$') {
+        if ($modeRaw -match '^(1|17|33|49|65|81)$') {
             return [int]$modeRaw
         }
 
-        Write-WarnMsg "Unsupported GPS mode. Allowed values: 2, 18, 34, 50, 66, 82."
+        Write-WarnMsg "Unsupported GPS mode. Allowed values: 1, 17, 33, 49, 65, 81."
     }
 }
 
@@ -1941,6 +1956,42 @@ function Select-DetectedComDevice {
 
         Write-WarnMsg "Invalid selection."
     }
+}
+
+function Install-FtdiDriverInteractive {
+    param(
+        [string]$LocalResourcePath,
+        [string]$RemoteUrl,
+        [string]$DownloadDir
+    )
+
+    if (Read-YesNo -Prompt "Have you already installed the FTDI USB serial driver for the GPS PPS device?" -DefaultYes $false) {
+        Write-Ok "FTDI driver already installed. Skipping."
+        return
+    }
+
+    Write-Info "Preparing FTDI USB serial driver installer (CDM212364_Setup.exe)..."
+
+    $installerPath = $LocalResourcePath
+    if (-not (Test-Path -LiteralPath $installerPath)) {
+        $installerPath = Join-Path $DownloadDir "CDM212364_Setup.exe"
+        Invoke-InstallerDownload -Url $RemoteUrl -OutputPath $installerPath -Label "FTDI USB serial driver"
+    }
+    else {
+        Write-Info "Using local FTDI driver installer: $installerPath"
+    }
+
+    try {
+        Install-Exe -InstallerPath $installerPath -Arguments @() -Label "FTDI USB serial driver"
+        Write-Ok "FTDI driver installation completed."
+    }
+    catch {
+        Write-WarnMsg ("FTDI driver installer finished with a warning: {0}" -f $_.Exception.Message)
+        Write-WarnMsg "If the driver appears installed in Device Manager, you can continue."
+    }
+
+    Write-Host "Please plug in the GPS PPS device now to verify the driver has loaded correctly." -ForegroundColor Yellow
+    [void](Read-Host "Press Enter when the GPS PPS device is connected")
 }
 
 function Find-GpsComPortInteractive {
@@ -2247,11 +2298,11 @@ function Update-GpsLines {
     }
 
     if ($NmeaOnly) {
-        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 4 maxpoll 4 iburst"
+        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 6 maxpoll 7 iburst"
         $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 0 flag2 0 refid GPS"
     }
     else {
-        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 4 maxpoll 4 prefer"
+        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 6 maxpoll 7 prefer"
         $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 1 flag2 1 refid GPS"
     }
 
@@ -2359,6 +2410,39 @@ function Try-RestartNtpService {
     }
 }
 
+function New-RestartNtpDesktopShortcut {
+    param([string]$InstallRoot)
+
+    $binDir     = Join-Path $InstallRoot "bin"
+    $batPath    = Join-Path $binDir "restartntp.bat"
+    $iconPath   = Join-Path $binDir "restart.ico"
+    $shortcutPath = Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "Restart NTP.lnk"
+
+    $create = Read-YesNo -Prompt "Do you want to add a Desktop shortcut for Restarting NTP (recommended)?" -DefaultYes $true
+    if (-not $create) { return }
+
+    if (-not (Test-Path -LiteralPath $batPath)) {
+        Write-WarnMsg ("restartntp.bat not found at {0}. Desktop shortcut not created." -f $batPath)
+        return
+    }
+
+    try {
+        $shell   = New-Object -ComObject WScript.Shell
+        $lnk     = $shell.CreateShortcut($shortcutPath)
+        $lnk.TargetPath       = $batPath
+        $lnk.WorkingDirectory = $binDir
+        $lnk.Description      = "Restart the NTP service"
+        if (Test-Path -LiteralPath $iconPath) {
+            $lnk.IconLocation = "$iconPath,0"
+        }
+        $lnk.Save()
+        Write-Ok ("Desktop shortcut created: {0}" -f $shortcutPath)
+    }
+    catch {
+        Write-WarnMsg ("Could not create desktop shortcut: {0}" -f $_.Exception.Message)
+    }
+}
+
 function Prompt-RestartIfNeeded {
     param([bool]$RestartNeeded)
 
@@ -2405,6 +2489,8 @@ $meinbergAutoIniTemplatePath = Join-Path $projectRoot "config\install.auto.templ
 $ntpMonitorInstallerUrl = "https://www.meinbergglobal.com/download/ntp/windows/time-server-monitor/ntp-time-server-monitor-104.exe"
 $ntpMonitorInstallerArgs = ""
 
+$ftdiDriverRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/resources/CDM212364_Setup.exe"
+
 $installRoot = Resolve-DefaultInstallRoot
 $statsDir = Join-Path $installRoot "etc\"
 $ntpConfPath = Join-Path $installRoot "etc\ntp.conf"
@@ -2422,7 +2508,7 @@ $gpsConfigured = $false
 $gpsNmeaOnly = $false
 $gpsApplied = $false
 $selectedComPort = 1
-$selectedGpsMode = 18
+$selectedGpsMode = 17
 $selectedCountry = "NZ"
 $selectedOtherCode = ""
 $transcriptStarted = $false
@@ -2651,6 +2737,11 @@ try {
             Write-Info "Selected mode: PPS + NMEA"
         }
 
+        if (-not $gpsNmeaOnly) {
+            $ftdiLocalPath = Join-Path $projectRoot "resources\CDM212364_Setup.exe"
+            Install-FtdiDriverInteractive -LocalResourcePath $ftdiLocalPath -RemoteUrl $ftdiDriverRemoteUrl -DownloadDir $downloadDir
+        }
+
         if (Read-YesNo -Prompt "Run built-in COM port detection now?" -DefaultYes $true) {
             $selectedComPort = Find-GpsComPortInteractive
             Write-Ok ("Using detected COM port: COM{0}" -f $selectedComPort)
@@ -2669,7 +2760,7 @@ try {
             }
         }
 
-        $selectedGpsMode = Read-GpsModeInteractive -CurrentMode $selectedGpsMode
+        $selectedGpsMode = Read-GpsModeInteractive -CurrentMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
 
         if (-not (Test-Path -LiteralPath $ntpConfPath)) {
             Write-WarnMsg "ntp.conf not found yet. GPS lines will be applied after Step 4 completes."
@@ -2689,6 +2780,27 @@ try {
             else {
                 $restartRecommended = $true
             }
+        }
+
+        if ($gpsNmeaOnly) {
+            Write-Host ""
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            Write-Host " GPS NMEA-only: USB delay adjustment required" -ForegroundColor Cyan
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            Write-Host "GPS NMEA time delivered over USB has a propagation delay, typically 50-150 ms." -ForegroundColor Yellow
+            Write-Host "This offset must be corrected in ntp.conf using the 'time2' fudge parameter." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "How to estimate and apply the correction:" -ForegroundColor Cyan
+            Write-Host "  1. After NTP is running, open NTP Time Server Monitor and check the GPS source offset." -ForegroundColor White
+            Write-Host "  2. Edit the fudge line in ntp.conf and set 'time2' to the negative of the observed offset." -ForegroundColor White
+            Write-Host "  3. Restart NTP and re-check. Repeat until the GPS source offset is near zero." -ForegroundColor White
+            Write-Host ""
+            Write-Host "Example fudge line (replace X with your COM port number, adjust time2 value):" -ForegroundColor Cyan
+            Write-Host ("  fudge 127.127.20.{0} time2 -0.100 refid GPS" -f $selectedComPort) -ForegroundColor White
+            Write-Host ""
+            Write-Host "If the offset shown in NTP Monitor is +120 ms, set time2 to -0.120 (seconds)." -ForegroundColor Yellow
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            Write-Host ""
         }
 
         $gpsConfigured = $true
@@ -2733,6 +2845,8 @@ try {
     if ($restartRecommended -and -not $restartCompleted) {
         $restartCompleted = Prompt-RestartIfNeeded -RestartNeeded $restartRecommended
     }
+
+    New-RestartNtpDesktopShortcut -InstallRoot $installRoot
 
     Write-Step "Completed"
     Write-Ok "Guided installer finished."

@@ -69,6 +69,39 @@ Behavior by Step 1 mode:
 - `docs/release-instructions.md`:
   Release checklist, semantic versioning guidance, and GitHub release procedure.
 
+## GPS Mode — NMEA Baud Rate Guidance
+
+When **GPS NMEA-only** mode is selected in Step 3, the GPS mode prompt recommends:
+
+- **Mode 17** — 9600 baud (default, recommended)
+- **Mode 1** — 4800 baud (alternative recommended)
+
+NMEA sentences work most reliably at these lower baud rates. Higher baud modes (33, 49, 65, 81) are available but not recommended for NMEA-only setups.
+
+## GPS PPS — FTDI USB Serial Driver
+
+When configuring GPS PPS + NMEA mode (Step 3), the installer asks:
+
+```
+Have you already installed the FTDI USB serial driver for the GPS PPS device? [y/N]
+```
+
+If No, it downloads `CDM212364_Setup.exe` from the repository `resources/` folder (or uses the local copy if already present) and runs it silently. After installation you are prompted to plug in the GPS PPS device to verify the driver loaded before COM port detection begins. GPS NMEA-only mode skips this step.
+
+## Desktop Shortcut — Restart NTP
+
+At the end of a successful install run the installer prompts:
+
+```
+Do you want to add a Desktop shortcut for Restarting NTP (recommended)? [Y/n]
+```
+
+Answering Yes (default) creates **Restart NTP.lnk** on the all-users Desktop pointing to `restartntp.bat` in the Meinberg `bin` folder. If `restart.ico` is present in the same folder it is used as the icon. Requires the standard-user layout (Step 1) to be applied so non-admin users can execute the script.
+
+## GPS Refclock Poll Interval
+
+The GPS/PPS serial refclock is configured with `minpoll 6 maxpoll 7` (64–128 s adaptive). This reduces unnecessary polling of the local serial driver while staying well within the NTP discipline window.
+
 ## Basic Troubleshooting
 
 - If Windows blocks launch, right-click the file -> Properties -> Unblock (if shown), then run as Administrator.
