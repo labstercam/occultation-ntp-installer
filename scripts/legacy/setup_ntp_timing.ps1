@@ -26,8 +26,8 @@ param(
     [int]$ComPort = 1,
 
     [Parameter(Mandatory = $false)]
-    [ValidateSet(2, 18, 34, 50, 66, 82)]
-    [int]$GpsMode = 18,
+    [ValidateSet(1, 17, 33, 49, 65, 81)]
+    [int]$GpsMode = 17,
 
     [Parameter(Mandatory = $false)]
     [string]$NtpInstallRoot = "",

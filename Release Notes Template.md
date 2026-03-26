@@ -1,3 +1,36 @@
+# v1.3.0 - Desktop Shortcut, GPS Poll Interval Tuning, FTDI Driver Install, NMEA Baud Guidance
+
+## What Changed
+- Step 3 (GPS PPS + NMEA mode only): installer now prompts whether the FTDI USB serial driver has already been installed. If not, it downloads `CDM212364_Setup.exe` from the repository (or uses the local copy in `resources/`) and runs it. After install, the user is prompted to plug in the GPS PPS device to verify the driver loaded before proceeding to COM port detection.
+- Step 3 GPS mode selection: when **NMEA-only** mode is chosen, the installer now explicitly recommends mode **1** (4800 baud) or **17** (9600 baud) and explains that NMEA data works most reliably at these lower baud rates. The advanced mode list also notes that 4800/9600 baud are recommended for NMEA.
+- After installation completes, the installer now prompts whether to create a Desktop shortcut **"Restart NTP"** pointing to `restartntp.bat` in the Meinberg `bin` folder (all-users Desktop). The shortcut uses `restart.ico` from the same folder if present. Default answer is Yes.
+- GPS refclock poll interval changed from `minpoll 4 maxpoll 4` (16 s fixed) to `minpoll 6 maxpoll 7` (64–128 s adaptive). This reduces unnecessary polling load on the local serial driver while staying well within the NTP discipline window.
+
+## Why This Release Matters
+- FTDI driver setup is now guided in-installer for GPS PPS users instead of being a manual pre-requisite step.
+- NMEA-only users are now steered toward the correct baud rate at setup time, reducing mis-configuration.
+- The Desktop shortcut gives users a quick, no-admin-required way to restart NTP after a config edit (when the standard-user layout is applied).
+- The adjusted poll interval better matches the stability characteristics of a local GPS/PPS refclock and reduces log churn.
+
+## Download
+- `install_ntp_timing_guided.cmd` (recommended for most users)
+- `install_ntp_timing_guided.ps1` (PowerShell entrypoint)
+
+## Install Steps
+1. Download `install_ntp_timing_guided.cmd`.
+2. Double-click.
+3. Click Yes on Administrator prompt.
+4. The launcher downloads the latest guided PowerShell installer from GitHub.
+5. If GitHub is unavailable and a previous local copy exists, choose whether to continue in offline mode.
+6. Follow guided installer prompts.
+
+## Notes
+- FTDI driver install is only offered in GPS **PPS + NMEA** mode; GPS NMEA-only mode skips this step.
+- Desktop shortcut creation requires `restartntp.bat` to already exist in the Meinberg `bin` folder; if it is missing a warning is shown and the shortcut is skipped.
+- GPS poll interval change affects `config/ntp.conf.template` and the generated `ntp.conf`; existing installations are updated on the next config-applying run.
+
+---
+
 # v1.2.0 - Installer Modes, Standard-User Access, And AU Flow Fixes
 
 ## What Changed

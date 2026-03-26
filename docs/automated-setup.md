@@ -118,7 +118,7 @@ $com = .\scripts\legacy\find_gps_com_port.ps1
 .\scripts\legacy\setup_ntp_timing.ps1 `
   -Country NZ `
   -ComPort $com `
-  -GpsMode 18 `
+  -GpsMode 17 `
   -MeinbergInstallerSilentArgs "<SILENT_ARGS>" `
   -NtpMonitorInstallerSilentArgs "<SILENT_ARGS>"
 ```
@@ -161,3 +161,57 @@ AU/NMI/University interactive prompts were clarified to reduce selection ambigui
 - uses `Select up to 2 ... servers`
 - explicitly says to enter server number(s) separated by comma
 - retains fallback note: `Additional servers will be added in the next steps`
+
+## GPS Mode Selection — NMEA Baud Rate Guidance
+
+When **GPS NMEA-only** mode is selected in Step 3, the GPS mode prompt shows additional guidance:
+
+```
+For NMEA-only receivers, modes 1 (4800 baud) or 17 (9600 baud) are recommended.
+NMEA data works most reliably at these lower baud rates.
+Use recommended GPS mode 17 (9600 baud)? [Y/n]
+```
+
+- Default: **17** (9600 baud)
+- Recommended alternative: **1** (4800 baud)
+- Higher baud modes (33/49/65/81) are listed but not recommended for NMEA-only use
+- **GPS PPS + NMEA** mode uses the same mode values but shows a generic prompt without the baud rate advisory
+
+## GPS PPS — FTDI USB Serial Driver
+
+When Step 3 is run in **GPS PPS + NMEA** mode, the installer prompts:
+
+```
+Have you already installed the FTDI USB serial driver for the GPS PPS device? [y/N]
+```
+
+- If **No**: downloads or locates `CDM212364_Setup.exe` and runs it
+  - Local source: `resources\CDM212364_Setup.exe` (used if present)
+  - Remote source: `https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/resources/CDM212364_Setup.exe`
+  - After install, prompts user to connect the GPS PPS device to verify driver loaded
+- If **Yes**: skips install and proceeds directly to COM detection
+- GPS **NMEA-only** mode skips this step entirely
+
+## Desktop Shortcut — Restart NTP
+
+At the end of a successful install run the installer prompts whether to create a Desktop shortcut:
+
+```
+Do you want to add a Desktop shortcut for Restarting NTP (recommended)? [Y/n]
+```
+
+- Shortcut target: `<NTP install root>\bin\restartntp.bat`
+- Shortcut location: all-users Desktop (`CommonDesktopDirectory`)
+- Icon: `<NTP install root>\bin\restart.ico` if present, otherwise default
+- If `restartntp.bat` is not found a warning is shown and the shortcut is skipped
+- Requires the standard-user access layout to be applied so non-admin users can execute the script without elevation
+
+## GPS Refclock Poll Interval
+
+The GPS/PPS serial refclock lines in `config/ntp.conf.template` (and generated `ntp.conf`) use:
+
+```
+minpoll 6 maxpoll 7
+```
+
+This gives a 64–128 s adaptive polling range instead of the previous fixed 16 s (`minpoll 4 maxpoll 4`). A local GPS/PPS source is stable enough that faster polling adds no benefit and increases log and driver overhead.
