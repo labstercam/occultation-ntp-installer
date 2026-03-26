@@ -163,7 +163,7 @@ class LoopRecord(object):
 
 
 class PeerRecord(object):
-    def __init__(self, mjd, sec_of_day, status, delay, dispersion, jitter, server_address=""):
+    def __init__(self, mjd, sec_of_day, status, delay, dispersion, jitter, server_address="", offset=0.0):
         self.mjd = mjd
         self.sec_of_day = sec_of_day
         self.status = status
@@ -171,6 +171,7 @@ class PeerRecord(object):
         self.dispersion = dispersion
         self.jitter = jitter
         self.server_address = server_address
+        self.offset = offset
 
 
 class DayOption(object):
@@ -194,6 +195,7 @@ class AnalysisResult(object):
         peer_selection_note,
         metrics,
         diagnostics,
+        pit_result=None,
     ):
         self.option = option
         self.mjds = mjds
@@ -203,6 +205,7 @@ class AnalysisResult(object):
         self.peer_selection_note = peer_selection_note
         self.metrics = metrics
         self.diagnostics = diagnostics
+        self.pit_result = pit_result
 
 
 def mjd_to_date_string(mjd):
@@ -475,6 +478,7 @@ def parse_peerstats(path, target_mjd):
                 mjd = int(parts[0])
                 sec_of_day = float(parts[1])
                 server_address = parts[2]
+                peer_offset = float(parts[4])
                 delay = float(parts[5])
                 dispersion = float(parts[6])
                 jitter = float(parts[7])
@@ -493,6 +497,7 @@ def parse_peerstats(path, target_mjd):
                     dispersion=dispersion,
                     jitter=jitter,
                     server_address=server_address,
+                    offset=peer_offset,
                 )
             )
     finally:
@@ -532,6 +537,20 @@ def is_selected_status(status_text):
         return False
     select_code = (value & 0x0700) >> 8
     return select_code in (6, 7)
+
+
+def is_candidate_or_better(status_text):
+    """Return True for peers that passed NTP's sanity checks (select code >= 4).
+
+    This includes candidate (4), backup (5), sys.peer (6) and pps.peer (7).
+    Codes 0-3 (reject, falseticker, excess, outlier) are excluded.
+    These peers carry valid independent offset measurements in peerstats.
+    """
+    value = parse_status_word(status_text)
+    if value is None:
+        return False
+    select_code = (value & 0x0700) >> 8
+    return select_code >= 4
 
 
 def get_select_code(status_text):
@@ -713,6 +732,326 @@ def _format_y_label_ms(value_ms, step):
         return "%.4f ms" % value_ms
 
 
+def _parse_pit_time_sec(hms_str):
+    """Parse an HH:MM:SS string to seconds past midnight UTC. Raises ValueError on bad input."""
+    parts = hms_str.strip().split(":")
+    if len(parts) != 3:
+        raise ValueError("Time must be in HH:MM:SS format (e.g. 14:32:05).")
+    try:
+        h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
+    except ValueError:
+        raise ValueError("Time must be in HH:MM:SS format (e.g. 14:32:05).")
+    if not (0 <= h < 24 and 0 <= m < 60 and 0.0 <= s < 60.0):
+        raise ValueError("Time values out of range (H:0-23, M:0-59, S:0-59).")
+    return h * 3600.0 + m * 60.0 + s
+
+
+def format_pit_section(pit):
+    """Format the point-in-time offset accuracy estimate as a list of report lines."""
+    query_dt = (MJD_EPOCH + timedelta(days=pit["query_mjd"])).isoformat()
+    query_hms = str(timedelta(seconds=int(pit["query_sec"])))
+    if pit["gap_after_s"] is not None:
+        gap_after_text = "%.1f s  (offset %s)" % (pit["gap_after_s"], format_ms(pit["offset_after"]))
+    else:
+        gap_after_text = "N/A (end of data)"
+    interpolated = pit["gap_after_s"] is not None
+    method_text = "Linear interpolation between surrounding loopstats records." if interpolated else "Last loopstats offset used (no later record available)."
+    server_text = pit["active_server_at_T"] if pit["active_server_at_T"] else "unknown"
+    lines = [
+        "Point-in-Time Offset Accuracy Estimate",
+        "=" * 80,
+        "Query time: %s %s UTC" % (query_dt, query_hms),
+        "Active reference server:            %s" % server_text,
+        "",
+        "Method: %s" % method_text,
+        "  Network asymmetry and offset scatter combined in quadrature.",
+        "",
+        "Best-estimate offset at T:          %s" % format_ms(pit["best_offset"]),
+        "  (loopstats freq at T:              %.6f ppm)" % pit["freq_ppm"],
+        "  (last loopstats sync:  -%s  offset %s)" % ("%.1f s" % pit["gap_before_s"], format_ms(pit["offset_before"])),
+        "  (next loopstats sync:  +%s)" % gap_after_text,
+        "",
+        "Uncertainty components:",
+        "  u_drift (residual between sync records): %s" % format_ms(pit["u_drift"]),
+        "  u_asymmetry (RTT/2/sqrt(3)):             %s" % format_ms(pit["u_asymmetry"]),
+        "    (mean RTT near T: %s, N=%d peer records)" % (format_ms(pit["mean_delay_near_T"]), pit["n_peer_near_T"]),
+        "  u_scatter (stdev of loopstats offsets near T): %s" % format_ms(pit["u_scatter"]),
+        "",
+        "  u_combined (k=1):  %s" % format_ms(pit["u_combined"]),
+        "  U_expanded (k=2):  +/- %s  (~95%% confidence)" % format_ms(pit["u_expanded"]),
+        "",
+        "Corrected UTC time = PC time - (%s)" % format_ms(pit["best_offset"]),
+        "Accuracy of corrected time: +/- %s (k=2)" % format_ms(pit["u_expanded"]),
+    ]
+
+    # --- Alternative candidate-peer estimate ---
+    lines.append("")
+    lines.append("Alternative estimate from best candidate peer (min sqrt(u_asym^2 + u_jitter^2)):")
+    n_cand = pit.get("n_candidate_peers_near_T", 0)
+    alt_exp = pit.get("alt_u_expanded")
+    if n_cand == 0:
+        lines.append("  No candidate-or-better peers (select code >= 4) found near T.")
+    elif alt_exp is None:
+        lines.append("  No alternative candidate peers found near T (sys.peer is the only candidate).")
+    else:
+        is_better = alt_exp < pit["u_expanded"]
+        verdict = ("IMPROVEMENT vs sys.peer estimate" if is_better
+                   else "no improvement (sys.peer already has lowest uncertainty)")
+        lines += [
+            "  Server: %-40s  RTT: %s  (record gap from T: %.1f s)" % (
+                pit["alt_server"], format_ms(pit["alt_delay"]), pit["alt_gap_s"]),
+            "  Offset at poll near T (peerstats):   %s" % format_ms(pit["alt_best_offset"]),
+            "  u_asymmetry (alt RTT/2/sqrt(3)):     %s" % format_ms(pit["alt_u_asymmetry"]),
+            "  u_scatter   (alt peer jitter):       %s" % format_ms(pit["alt_u_scatter"]),
+            "  U_expanded  (k=2):  +/- %s  -- %s" % (format_ms(alt_exp), verdict),
+        ]
+        if is_better:
+            lines.append(
+                "  *** Lower-uncertainty estimate:  offset = %s  +/- %s (k=2) ***" % (
+                    format_ms(pit["alt_best_offset"]), format_ms(alt_exp))
+            )
+    return lines
+
+
+def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_seconds=3600.0):
+    """Estimate the NTP offset and its uncertainty at a specific point in time.
+
+    Parameters
+    ----------
+    query_mjd : int
+        Modified Julian Day of the query time.
+    query_sec : float
+        Seconds past midnight (UTC) of the query time.
+    loop_rows : list of LoopRecord
+        All loopstats records available (need not be filtered to one day).
+    peer_rows : list of PeerRecord
+        All peerstats records available.
+    window_seconds : float
+        Half-width of the time window used to gather nearby peer samples for
+        the network uncertainty estimate (default ±1 hour).
+
+    Returns
+    -------
+    dict with keys:
+        query_mjd, query_sec          -- echo of inputs
+        best_offset                    -- estimated offset at T (seconds)
+        u_drift                        -- uncertainty from clock walk since last sync (s)
+        u_asymmetry                    -- network path asymmetry uncertainty (s)
+        u_scatter                      -- NTP measurement scatter near T (s)
+        u_combined                     -- combined standard uncertainty k=1 (s)
+        u_expanded                     -- expanded uncertainty k=2, ~95% (s)
+        gap_before_s                   -- seconds between T and the last loopstats record
+        gap_after_s                    -- seconds between T and the next loopstats record (or None)
+        freq_ppm                       -- freq correction in use at T (ppm)
+        mean_delay_near_T              -- mean RTT of nearby peer records (s)
+        n_peer_near_T                  -- count of peer records used for network estimate
+        active_server_at_T             -- server address active at T (str or None)
+        note                           -- human-readable summary string
+    """
+    # Convert every loopstats row to a single comparable float: seconds since MJD epoch
+    def loop_abs_sec(row):
+        return row.mjd * 86400.0 + row.sec_of_day
+
+    def peer_abs_sec(row):
+        return row.mjd * 86400.0 + row.sec_of_day
+
+    query_abs = query_mjd * 86400.0 + query_sec
+
+    sorted_loop = sorted(loop_rows, key=loop_abs_sec)
+    if not sorted_loop:
+        raise RuntimeError("No loopstats rows available for point-in-time estimate.")
+
+    # Find the last loopstats record at or before T ("before"), and the first after T ("after").
+    before = None
+    after = None
+    for row in sorted_loop:
+        t = loop_abs_sec(row)
+        if t <= query_abs:
+            before = row
+        elif after is None:
+            after = row
+
+    if before is None:
+        # T is before all data — use the earliest record, extrapolating backward
+        before = sorted_loop[0]
+
+    # Time gaps
+    gap_before_s = query_abs - loop_abs_sec(before)
+    gap_after_s = (loop_abs_sec(after) - query_abs) if after is not None else None
+
+    freq_ppm = before.freq
+    offset_before = before.offset
+    offset_after = after.offset if after is not None else None
+
+    # Best-estimate offset at T:
+    #   loopstats freq is the correction NTP is *already applying* to the kernel clock,
+    #   not an uncompensated drift.  Projecting it forward double-counts the correction.
+    #   When the record on both sides of T is available, linear interpolation between
+    #   the two measured offsets is the most accurate estimate.  When only the record
+    #   before T is available, use that offset directly (best known value).
+    if after is not None:
+        total_gap = gap_before_s + gap_after_s
+        fraction = gap_before_s / total_gap if total_gap > 0 else 0.0
+        best_offset = before.offset + fraction * (after.offset - before.offset)
+    else:
+        best_offset = before.offset
+
+    # Uncertainty from residual clock drift between the last sync and T.
+    #   When interpolating: the jitter at the surrounding records bounds how much the
+    #   true offset deviates from a straight line between them.
+    #   When extrapolating (no after record): the freq value tells us the rate at which
+    #   ntpd was steering the clock; the residual uncertainty grows with the gap.
+    if after is not None:
+        u_drift = max(before.jitter, after.jitter)
+    else:
+        freq_drift_bound = abs(freq_ppm * 1e-6 * gap_before_s)
+        u_drift = max(freq_drift_bound / SQRT3, before.jitter)
+
+    # Gather peer records within ±window_seconds of T for the network estimate.
+    selected_peer_rows, _note = select_peer_subset(peer_rows)
+    near_peers = [
+        row for row in selected_peer_rows
+        if abs(peer_abs_sec(row) - query_abs) <= window_seconds
+    ]
+    # Fall back to the full selected subset if the window is empty.
+    if not near_peers:
+        near_peers = selected_peer_rows
+
+    # Determine which server was active at T using the same reduce_to_active_timeline logic.
+    active_server_at_T = None
+    active_timeline = reduce_to_active_timeline(selected_peer_rows)
+    last_active = None
+    for row in active_timeline:
+        if peer_abs_sec(row) <= query_abs:
+            last_active = row
+        else:
+            break
+    if last_active is not None:
+        active_server_at_T = last_active.server_address if hasattr(last_active, "server_address") else None
+
+    # Network path asymmetry uncertainty from nearby peers.
+    # Use only the active server's records near T if available;
+    # fall back to all selected near-peers.
+    active_near_peers = [
+        row for row in near_peers
+        if (row.server_address if hasattr(row, "server_address") else None) == active_server_at_T
+    ] if active_server_at_T else []
+    network_peers = active_near_peers if active_near_peers else near_peers
+
+    delays_near = [row.delay for row in network_peers]
+    mean_delay_near = mean(delays_near) if delays_near else 0.0
+    # Half-RTT as worst-case one-way asymmetry bound; rectangular -> divide by sqrt(3)
+    u_asymmetry = (mean_delay_near / 2.0) / SQRT3
+
+    # Scatter: standard deviation of offsets among nearby loopstats records.
+    # Use a matching window around T.
+    near_loop = [
+        row for row in sorted_loop
+        if abs(loop_abs_sec(row) - query_abs) <= window_seconds
+    ]
+    near_offsets = [row.offset for row in near_loop] if near_loop else [before.offset]
+    u_scatter = stdev(near_offsets) if len(near_offsets) >= 2 else 0.0
+
+    u_combined = math.sqrt(u_drift * u_drift + u_asymmetry * u_asymmetry + u_scatter * u_scatter)
+    u_expanded = 2.0 * u_combined
+
+    # --- Alternative low-uncertainty estimate from candidate peers ---
+    # The loopstats offset is disciplined by the sys.peer only, so u_asymmetry above
+    # reflects that peer's RTT.  Other candidate-or-better peers (select codes 4-7)
+    # carry their own independently-measured UTC offsets in peerstats column [4].
+    # A peer with a smaller combined sqrt(u_asym^2 + u_jitter^2) may give a
+    # lower-uncertainty independent estimate.  We use its offset AND delay together
+    # (never mixing another peer's delay with the loopstats offset).
+    candidate_near = [
+        row for row in peer_rows
+        if abs(peer_abs_sec(row) - query_abs) <= window_seconds
+        and is_candidate_or_better(row.status)
+    ]
+    alt_candidate_near = [
+        row for row in candidate_near
+        if (row.server_address if hasattr(row, "server_address") else "") != active_server_at_T
+    ] if active_server_at_T else candidate_near
+
+    alt_best_offset = None
+    alt_u_asymmetry = None
+    alt_u_scatter = None
+    alt_u_combined = None
+    alt_u_expanded = None
+    alt_server = None
+    alt_delay = None
+    alt_gap_s = None
+    n_candidate_peers_near_T = len(set(
+        row.server_address for row in candidate_near
+        if hasattr(row, "server_address")
+    ))
+
+    if alt_candidate_near:
+        # For each distinct server keep only the record nearest in time to T.
+        by_server = {}
+        for row in alt_candidate_near:
+            addr = row.server_address if hasattr(row, "server_address") else ""
+            gap = abs(peer_abs_sec(row) - query_abs)
+            current = by_server.get(addr)
+            if current is None or gap < current[0]:
+                by_server[addr] = (gap, row)
+        # Score each server by combined uncertainty; pick the minimum.
+        best_score = None
+        for addr, (gap, row) in by_server.items():
+            u_a = (row.delay / 2.0) / SQRT3
+            u_s = row.jitter
+            score = math.sqrt(u_a * u_a + u_s * u_s)
+            if best_score is None or score < best_score:
+                best_score = score
+                alt_server = addr
+                alt_delay = row.delay
+                alt_gap_s = gap
+                alt_u_asymmetry = u_a
+                alt_u_scatter = u_s
+                alt_best_offset = row.offset
+                alt_u_combined = score
+                alt_u_expanded = 2.0 * score
+
+    note_parts = [
+        "gap_before=%.1fs" % gap_before_s,
+        "freq=%.3fppm" % freq_ppm,
+        "u_drift=%s" % format_ms(u_drift),
+        "u_asymmetry=%s" % format_ms(u_asymmetry),
+        "u_scatter=%s" % format_ms(u_scatter),
+        "U_expanded(k=2)=+/-%s" % format_ms(u_expanded),
+    ]
+    if active_server_at_T:
+        note_parts.insert(0, "server=%s" % active_server_at_T)
+
+    return {
+        "query_mjd": query_mjd,
+        "query_sec": query_sec,
+        "best_offset": best_offset,
+        "offset_before": offset_before,
+        "offset_after": offset_after,
+        "u_drift": u_drift,
+        "u_asymmetry": u_asymmetry,
+        "u_scatter": u_scatter,
+        "u_combined": u_combined,
+        "u_expanded": u_expanded,
+        "gap_before_s": gap_before_s,
+        "gap_after_s": gap_after_s,
+        "freq_ppm": freq_ppm,
+        "mean_delay_near_T": mean_delay_near,
+        "n_peer_near_T": len(network_peers),
+        "active_server_at_T": active_server_at_T,
+        "n_candidate_peers_near_T": n_candidate_peers_near_T,
+        "alt_best_offset": alt_best_offset,
+        "alt_u_asymmetry": alt_u_asymmetry,
+        "alt_u_scatter": alt_u_scatter,
+        "alt_u_combined": alt_u_combined,
+        "alt_u_expanded": alt_u_expanded,
+        "alt_server": alt_server,
+        "alt_delay": alt_delay,
+        "alt_gap_s": alt_gap_s,
+        "note": "; ".join(note_parts),
+    }
+
+
 def analyze(option, loop_rows, peer_rows):
     if not loop_rows:
         raise RuntimeError("No usable loopstats rows were found for the selected day.")
@@ -787,6 +1126,12 @@ def analyze(option, loop_rows, peer_rows):
     g_u_combined = math.sqrt(g_u_asymmetry * g_u_asymmetry + g_u_measurement * g_u_measurement)
     g_u_expanded = 2.0 * g_u_combined
 
+    # Point-in-time estimate: use the last loopstats record as the representative query time.
+    # Callers can also call estimate_offset_at_time() directly with any (mjd, sec) pair.
+    sorted_loop_for_pit = sorted(loop_rows, key=lambda r: (r.mjd, r.sec_of_day))
+    last_loop = sorted_loop_for_pit[-1]
+    pit_result = estimate_offset_at_time(last_loop.mjd, last_loop.sec_of_day, loop_rows, peer_rows)
+
     mjds = sorted(set([row.mjd for row in loop_rows] + [row.mjd for row in peer_rows]))
 
     metrics = {
@@ -833,6 +1178,7 @@ def analyze(option, loop_rows, peer_rows):
         peer_selection_note=peer_selection_note,
         metrics=metrics,
         diagnostics=diagnostics,
+        pit_result=pit_result,
     )
 
 
@@ -1042,6 +1388,10 @@ class AnalyzerForm(Form):
 
         self._options_by_label = {}
         self._plot_data = {}
+        self._last_loop_rows = []
+        self._last_peer_rows = []
+        self._last_result = None
+        self._last_aggregate_report = ""
 
         default_font = Font("Segoe UI", 9)
         bold_font = Font("Segoe UI", 9, FontStyle.Bold)
@@ -1155,6 +1505,46 @@ class AnalyzerForm(Form):
         self.chk_raw_peer_points.Size = Size(228, 24)
         self.chk_raw_peer_points.Checked = False
         lp.Controls.Add(self.chk_raw_peer_points)
+
+        self.lbl_pit_time = Label()
+        self.lbl_pit_time.Text = "Point-in-time (HH:MM:SS, dataset day):"
+        self.lbl_pit_time.Location = Point(8, 348)
+        self.lbl_pit_time.Size = Size(280, 20)
+        lp.Controls.Add(self.lbl_pit_time)
+
+        self.txt_pit_time = TextBox()
+        self.txt_pit_time.Text = ""
+        self.txt_pit_time.Location = Point(8, 370)
+        self.txt_pit_time.Size = Size(160, 24)
+        lp.Controls.Add(self.txt_pit_time)
+
+        self.btn_pit = Button()
+        self.btn_pit.Text = "Calculate PIT"
+        self.btn_pit.Location = Point(174, 368)
+        self.btn_pit.Size = Size(112, 28)
+        self.btn_pit.Click += self.on_pit_calculate
+        lp.Controls.Add(self.btn_pit)
+
+        self.lbl_pit_result = Label()
+        self.lbl_pit_result.Text = "Estimated Offset and Error to use:"
+        self.lbl_pit_result.Font = bold_font
+        self.lbl_pit_result.Location = Point(8, 402)
+        self.lbl_pit_result.Size = Size(280, 20)
+        lp.Controls.Add(self.lbl_pit_result)
+
+        self.txt_pit_result = TextBox()
+        self.txt_pit_result.Text = ""
+        self.txt_pit_result.ReadOnly = True
+        self.txt_pit_result.Font = bold_font
+        self.txt_pit_result.Location = Point(8, 424)
+        self.txt_pit_result.Size = Size(280, 24)
+        lp.Controls.Add(self.txt_pit_result)
+
+        self.lbl_pit_note = Label()
+        self.lbl_pit_note.Text = "Actual error via fibre likely 2-5x smaller, but no less than the jitter"
+        self.lbl_pit_note.Location = Point(8, 450)
+        self.lbl_pit_note.Size = Size(280, 34)
+        lp.Controls.Add(self.lbl_pit_note)
 
         self.btn_analyze = Button()
         self.btn_analyze.Text = "Analyze"
@@ -1382,8 +1772,34 @@ class AnalyzerForm(Form):
 
         self.chk_raw_peer_points.Location = Point(margin, y)
         self.chk_raw_peer_points.Size = Size(min(260, full_w), text_h)
+        y += text_h + inter
 
-        content_top = self.chk_raw_peer_points.Bottom + inter
+        self.lbl_pit_time.Location = Point(margin, y)
+        self.lbl_pit_time.Size = Size(full_w, label_h)
+        y += label_h
+
+        pit_btn_w = 120
+        pit_gap = 6
+        pit_txt_w = max(80, full_w - pit_btn_w - pit_gap)
+        self.txt_pit_time.Location = Point(margin, y)
+        self.txt_pit_time.Size = Size(pit_txt_w, text_h)
+        self.btn_pit.Location = Point(margin + pit_txt_w + pit_gap, y - 1)
+        self.btn_pit.Size = Size(pit_btn_w, button_h)
+        y += max(text_h, button_h) + inter
+
+        self.lbl_pit_result.Location = Point(margin, y)
+        self.lbl_pit_result.Size = Size(full_w, label_h)
+        y += label_h
+
+        self.txt_pit_result.Location = Point(margin, y)
+        self.txt_pit_result.Size = Size(full_w, text_h)
+        y += text_h + 3
+
+        self.lbl_pit_note.Location = Point(margin, y)
+        self.lbl_pit_note.Size = Size(full_w, label_h * 2)
+        y += label_h * 2 + inter
+
+        content_top = y
         status_height = 24
         output_height = max(120, panel.ClientSize.Height - content_top - status_height)
         self.txt_output.Location = Point(margin, content_top)
@@ -1981,10 +2397,14 @@ class AnalyzerForm(Form):
             loop_rows = parse_loopstats(option.loop_path, option.target_mjd)
             peer_rows = parse_peerstats(option.peer_path, option.target_mjd)
             result = analyze(option, loop_rows, peer_rows)
-            peer_subset, _ignore_note = select_peer_subset(peer_rows)
-            report = generate_report(result)
-            self.txt_output.Text = report
+            self._last_loop_rows = loop_rows
+            self._last_peer_rows = peer_rows
+            self._last_result = result
+            self._last_aggregate_report = generate_report(result)
             self.update_charts(loop_rows, peer_rows, self.chk_raw_peer_points.Checked)
+
+            pit = self._compute_pit_for_display(loop_rows, peer_rows, result)
+            self._show_combined_output(pit)
 
             save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
 
@@ -2002,6 +2422,62 @@ class AnalyzerForm(Form):
         except Exception as error:
             self.show_error(str(error))
             self.set_status("Analysis failed.")
+
+    def _compute_pit_for_display(self, loop_rows, peer_rows, result):
+        """Return pit_result using the user-entered HH:MM:SS time if valid, else the last loopstats record."""
+        hms_text = self.txt_pit_time.Text.strip()
+        if hms_text:
+            try:
+                query_sec = _parse_pit_time_sec(hms_text)
+                query_mjd = max(result.mjds) if result.mjds else max(r.mjd for r in loop_rows)
+                return estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows)
+            except Exception as err:
+                self.show_error("Invalid point-in-time entry: %s\r\nUsing last loopstats record." % str(err))
+        return result.pit_result
+
+    def _update_pit_result_display(self, pit):
+        """Update the read-only summary box with the best-estimate offset and error."""
+        if pit is None:
+            self.txt_pit_result.Text = ""
+            return
+        alt_exp = pit.get("alt_u_expanded")
+        primary_exp = pit["u_expanded"]
+        if alt_exp is not None and alt_exp < primary_exp:
+            offset_ms = pit["alt_best_offset"] * 1000.0
+            error_ms = alt_exp * 1000.0
+        else:
+            offset_ms = pit["best_offset"] * 1000.0
+            error_ms = primary_exp * 1000.0
+        self.txt_pit_result.Text = "Offset: %.1f ms; Error: %.1f ms" % (offset_ms, error_ms)
+
+    def _show_combined_output(self, pit):
+        """Compose and display PIT section (top) then the aggregate report (below)."""
+        if pit is not None:
+            pit_text = "\r\n".join(format_pit_section(pit))
+        else:
+            pit_text = "(No point-in-time estimate available.)"
+        separator = "\r\n" + ("=" * 80) + "\r\n\r\n"
+        self.txt_output.Text = pit_text + separator + self._last_aggregate_report
+        self._update_pit_result_display(pit)
+
+    def on_pit_calculate(self, sender, event):
+        try:
+            if not self._last_loop_rows:
+                self.show_error("Run Analyze first to load a dataset.")
+                return
+            hms_text = self.txt_pit_time.Text.strip()
+            if not hms_text:
+                self.show_error("Enter a time in HH:MM:SS format.")
+                return
+            query_sec = _parse_pit_time_sec(hms_text)
+            query_mjd = max(self._last_result.mjds) if self._last_result and self._last_result.mjds else max(r.mjd for r in self._last_loop_rows)
+            pit = estimate_offset_at_time(query_mjd, query_sec, self._last_loop_rows, self._last_peer_rows)
+            self._show_combined_output(pit)
+            self._update_pit_result_display(pit)
+            self.set_status("Point-in-time estimate calculated for %s." % hms_text)
+        except Exception as error:
+            self.show_error(str(error))
+            self.set_status("Point-in-time calculation failed.")
 
 
 def main():
