@@ -769,6 +769,24 @@ def analyze(option, loop_rows, peer_rows):
     )
     d_u_expanded = 2.0 * d_u_combined
 
+    # Offset accuracy to UTC (3 practical variants)
+    # Variant E: Minimal (network asymmetry + NTP measurement variation)
+    e_u_asymmetry = mean_half_delay / SQRT3
+    e_u_measurement = stdev(offsets)
+    e_u_combined = math.sqrt(e_u_asymmetry * e_u_asymmetry + e_u_measurement * e_u_measurement)
+    e_u_expanded = 2.0 * e_u_combined
+
+    # Variant F: Using NTP's dispersion directly
+    f_u_offset = mean_dispersion
+    f_u_expanded = 2.0 * f_u_offset
+
+    # Variant G: Conservative (worst-case delay)
+    max_delay = max(delays) if delays else mean_delay
+    g_u_asymmetry = (max_delay / 2.0) / SQRT3
+    g_u_measurement = stdev(offsets)
+    g_u_combined = math.sqrt(g_u_asymmetry * g_u_asymmetry + g_u_measurement * g_u_measurement)
+    g_u_expanded = 2.0 * g_u_combined
+
     mjds = sorted(set([row.mjd for row in loop_rows] + [row.mjd for row in peer_rows]))
 
     metrics = {
@@ -794,6 +812,16 @@ def analyze(option, loop_rows, peer_rows):
         "d_u_server": d_u_server,
         "d_u_combined": d_u_combined,
         "d_u_expanded": d_u_expanded,
+        "e_u_asymmetry": e_u_asymmetry,
+        "e_u_measurement": e_u_measurement,
+        "e_u_combined": e_u_combined,
+        "e_u_expanded": e_u_expanded,
+        "f_u_offset": f_u_offset,
+        "f_u_expanded": f_u_expanded,
+        "g_u_asymmetry": g_u_asymmetry,
+        "g_u_measurement": g_u_measurement,
+        "g_u_combined": g_u_combined,
+        "g_u_expanded": g_u_expanded,
     }
 
     return AnalysisResult(
@@ -874,6 +902,28 @@ def generate_report(result):
         "u_server (rectangular): %s" % format_us(m["d_u_server"]),
         "u_combined (k=1): %s" % format_ms(m["d_u_combined"]),
         "U_expanded (k=2): +/- %s" % format_ms(m["d_u_expanded"]),
+        "",
+        "Offset Accuracy to UTC (practical variants)",
+        "=" * 80,
+        "",
+        "Variant E (minimal: network + measurement)",
+        "-" * 80,
+        "u_asymmetry = (mean(delay)/2)/sqrt(3): %s" % format_ms(m["e_u_asymmetry"]),
+        "u_measurement = stdev(offset): %s" % format_ms(m["e_u_measurement"]),
+        "u_combined (k=1): %s" % format_ms(m["e_u_combined"]),
+        "U_expanded (k=2): +/- %s" % format_ms(m["e_u_expanded"]),
+        "",
+        "Variant F (using NTP's dispersion directly)",
+        "-" * 80,
+        "u_offset = mean(dispersion): %s" % format_ms(m["f_u_offset"]),
+        "U_expanded (k=2): +/- %s" % format_ms(m["f_u_expanded"]),
+        "",
+        "Variant G (conservative: worst-case delay)",
+        "-" * 80,
+        "u_asymmetry = (max(delay)/2)/sqrt(3): %s" % format_ms(m["g_u_asymmetry"]),
+        "u_measurement = stdev(offset): %s" % format_ms(m["g_u_measurement"]),
+        "u_combined (k=1): %s" % format_ms(m["g_u_combined"]),
+        "U_expanded (k=2): +/- %s" % format_ms(m["g_u_expanded"]),
     ]
 
     return "\r\n".join(lines)
