@@ -1,3 +1,33 @@
+# v1.4.0 - Windows QoS Priority for NTP, Registry Backup
+
+## What Changed
+- **Step 5 (new):** Optional Windows QoS step that creates two Policy-based QoS rules marking NTP UDP port 123 traffic with DSCP 46 (Expedited Forwarding). Policy names: `NTP Outbound Priority` (dst port 123) and `NTP Inbound Priority` (src port 123). Any pre-existing policies with these names are replaced. Step can be skipped and re-run independently at any time.
+- **Registry backup:** At installer startup (after the user confirms they want to proceed), the installer automatically exports `HKLM\SYSTEM\CurrentControlSet\Services\NTP` to a timestamped `.reg` file in the user's Downloads folder. A Windows notification dialog confirms the backup path. If the NTP service registry key does not yet exist the backup is silently skipped.
+- Welcome screen updated to list Step 5.
+
+## Why This Release Matters
+- NTP timing accuracy on Windows benefits from the kernel network scheduler giving NTP packets priority over best-effort traffic. DSCP 46 (EF) is the standard marking for latency-sensitive traffic and is honoured by managed network infrastructure.
+- The automatic registry backup gives users a simple one-click restore point before the installer modifies any registry values, reducing risk for first-time and upgrade installs.
+
+## Download
+- `install_ntp_timing_guided.cmd` (recommended for most users)
+- `install_ntp_timing_guided.ps1` (PowerShell entrypoint)
+
+## Install Steps
+1. Download `install_ntp_timing_guided.cmd`.
+2. Double-click.
+3. Click Yes on Administrator prompt.
+4. The launcher downloads the latest guided PowerShell installer from GitHub.
+5. If GitHub is unavailable and a previous local copy exists, choose whether to continue in offline mode.
+6. Follow guided installer prompts.
+
+## Notes
+- QoS policy creation requires Windows 8 / Server 2012 or later (`New-NetQosPolicy` cmdlet).
+- DSCP marking is most impactful on managed enterprise/lab networks with DiffServ-aware switches. On home/SOHO networks the benefit is limited to the local Windows scheduler.
+- Registry backup file is a standard `.reg` file; double-click to restore if needed.
+
+---
+
 # v1.3.0 - Desktop Shortcut, GPS Poll Interval Tuning, FTDI Driver Install, NMEA Baud Guidance
 
 ## What Changed

@@ -7,6 +7,7 @@ What it does:
 2. Downloads and installs Meinberg NTP Time Server Monitor for Windows
 3. Assists with setting up GPS receivers for PPS and NMEA time
 4. Configures the NTP servers for specific countries to use their National Standard time server, and a set of good quality servers
+5. Optionally sets Windows QoS priority (DSCP 46) for NTP UDP port 123 traffic
 
 ## Step 1 Install Modes
 
@@ -101,6 +102,21 @@ Answering Yes (default) creates **Restart NTP.lnk** on the all-users Desktop poi
 ## GPS Refclock Poll Interval
 
 The GPS/PPS serial refclock is configured with `minpoll 6 maxpoll 7` (64–128 s adaptive). This reduces unnecessary polling of the local serial driver while staying well within the NTP discipline window.
+
+## Windows QoS Priority for NTP (Step 5)
+
+Step 5 creates two Windows Policy-based QoS rules that mark NTP packets with **DSCP 46** (Expedited Forwarding — the same class used for VoIP):
+
+- **NTP Outbound Priority** — marks packets sent to UDP port 123
+- **NTP Inbound Priority** — marks packets received from UDP port 123
+
+This causes the Windows kernel network scheduler to de-queue NTP traffic ahead of best-effort traffic. On managed networks with DiffServ-aware switches and routers, the DSCP marking is also honoured by the network infrastructure. On home or SOHO networks the benefit is confined to the local Windows scheduler.
+
+Step 5 is optional and can be skipped or re-run at any time.
+
+## Registry Backup
+
+At startup, after you confirm you want to proceed, the installer automatically exports the `HKLM\SYSTEM\CurrentControlSet\Services\NTP` registry key to a timestamped `.reg` file in your **Downloads** folder (e.g. `NTP_registry_backup_20260328_120000.reg`). A notification dialog confirms the backup path. Double-clicking the file restores the key if needed. If the NTP service key does not yet exist the backup step is silently skipped.
 
 ## Basic Troubleshooting
 

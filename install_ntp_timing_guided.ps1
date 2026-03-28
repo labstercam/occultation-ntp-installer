@@ -4,10 +4,40 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+Add-Type -AssemblyName System.Windows.Forms
+
 function Write-Info([string]$Message) { Write-Host "[INFO] $Message" -ForegroundColor Cyan }
 function Write-WarnMsg([string]$Message) { Write-Host "[WARN] $Message" -ForegroundColor Yellow }
 function Write-Ok([string]$Message) { Write-Host "[ OK ] $Message" -ForegroundColor Green }
 function Write-Step([string]$Message) { Write-Host "`n=== $Message ===" -ForegroundColor Green }
+
+function Backup-NtpRegistry {
+    $ntpKeyPath = "HKLM\SYSTEM\CurrentControlSet\Services\NTP"
+    $downloadsFolder = [System.IO.Path]::Combine([System.Environment]::GetFolderPath("UserProfile"), "Downloads")
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $backupPath = [System.IO.Path]::Combine($downloadsFolder, "NTP_registry_backup_$timestamp.reg")
+
+    if (-not (Test-Path -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\NTP")) {
+        Write-Info "NTP service registry key not yet present; backup skipped."
+        return
+    }
+
+    try {
+        $null = reg export $ntpKeyPath $backupPath /y 2>&1
+        Write-Ok "Registry backup saved to: $backupPath"
+        Write-Host ""
+        [System.Windows.Forms.MessageBox]::Show(
+            "A backup of the NTP registry key has been saved to:`n`n$backupPath`n`nYou can restore it by double-clicking the .reg file if needed.",
+            "Registry Backup Created",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    }
+    catch {
+        Write-WarnMsg ("Registry backup failed: {0}" -f $_.Exception.Message)
+        Write-WarnMsg "You may want to manually export HKLM\SYSTEM\CurrentControlSet\Services\NTP before continuing."
+    }
+}
 
 $script:RemoteDownloadsDisabled = ($env:OCNTP_REMOTE_DISABLED -eq '1')
 $script:RemoteOverrideNoticeShown = $false
@@ -2335,6 +2365,45 @@ function Update-GpsLines {
     Write-Ok ("GPS entries updated in {0}: {1} kept ({2})" -f $NtpConfPath, @($selected).Count, $modeStr)
 }
 
+function Invoke-NtpQosStep {
+    $policyNames = @(
+        "NTP Outbound Priority",
+        "NTP Inbound Priority"
+    )
+
+    # Remove any pre-existing policies with these names to avoid conflicts.
+    foreach ($name in $policyNames) {
+        try {
+            $existing = Get-NetQosPolicy -Name $name -ErrorAction SilentlyContinue
+            if ($null -ne $existing) {
+                Remove-NetQosPolicy -Name $name -Confirm:$false -ErrorAction Stop
+                Write-Info ("Removed existing QoS policy: {0}" -f $name)
+            }
+        }
+        catch {
+            Write-WarnMsg ("Could not remove existing QoS policy '{0}': {1}" -f $name, $_.Exception.Message)
+        }
+    }
+
+    try {
+        New-NetQosPolicy -Name "NTP Outbound Priority" `
+            -IPProtocol UDP -IPDstPort 123 `
+            -DSCPAction 46 -NetworkProfile All -ErrorAction Stop | Out-Null
+        Write-Ok "Created QoS policy: NTP Outbound Priority (UDP dst 123, DSCP 46)"
+
+        New-NetQosPolicy -Name "NTP Inbound Priority" `
+            -IPProtocol UDP -IPSrcPort 123 `
+            -DSCPAction 46 -NetworkProfile All -ErrorAction Stop | Out-Null
+        Write-Ok "Created QoS policy: NTP Inbound Priority (UDP src 123, DSCP 46)"
+
+        return $true
+    }
+    catch {
+        Write-WarnMsg ("Failed to create QoS policy: {0}" -f $_.Exception.Message)
+        return $false
+    }
+}
+
 function Set-PpsProviderRegistryValue {
     param([string]$DllPath)
 
@@ -2551,6 +2620,7 @@ try {
     Write-Host " 2) Install NTP Time Server Monitor"
     Write-Host " 3) Configure optional GPS/PPS serial source"
     Write-Host " 4) Configure internet NTP servers by country"
+    Write-Host " 5) Set Windows QoS priority for NTP traffic (UDP port 123)"
     Write-Host ""
     Write-Host "Estimated time: 10-20 minutes (depends on internet speed and installer prompts)." -ForegroundColor Cyan
     Write-Host "Internet access is needed for optional downloads." -ForegroundColor Cyan
@@ -2566,6 +2636,8 @@ try {
     if (-not (Read-YesNo -Prompt "Proceed with guided installer?" -DefaultYes $true)) {
         throw "Installer canceled by user at launch page."
     }
+
+    Backup-NtpRegistry
 
     if (Confirm-Step -Title "Step 1: Install Meinberg NTP and prepare logging" -Details @(
             "Downloads and installs Meinberg NTP.",
@@ -2840,6 +2912,18 @@ try {
         $restartRecommended = $true
 
         Show-CountryInstallSummary -Country $selectedCountry -OtherCode $selectedOtherCode -CountryConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath
+    }
+
+    if (Confirm-Step -Title "Step 5: Set Windows QoS priority for NTP traffic" -Details @(
+            "Creates two Windows QoS policies that mark NTP packets with DSCP 46 (Expedited Forwarding).",
+            "DSCP 46 is the same class used for VoIP/real-time traffic.",
+            "The Windows kernel network scheduler will de-queue NTP packets ahead of best-effort traffic.",
+            "On managed networks, switches and routers that honour DiffServ will also prioritise NTP.",
+            "On home/SOHO networks this mainly benefits the local Windows scheduler.",
+            "Policy names: 'NTP Outbound Priority' (UDP dst 123), 'NTP Inbound Priority' (UDP src 123).",
+            "Any existing policies with these names will be replaced."
+        )) {
+        Invoke-NtpQosStep | Out-Null
     }
 
     if ($restartRecommended -and -not $restartCompleted) {
