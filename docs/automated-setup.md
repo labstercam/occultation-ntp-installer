@@ -46,6 +46,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 - Country-based server setup using curated profiles and fallback logic.
 - Marker-based managed updates to `ntp.conf` while preserving unrelated config.
 - Static IP guidance during server setup, including suggested values and Windows 10/11 entry steps.
+- Optional Windows QoS policy creation (DSCP 46) for NTP UDP port 123 traffic.
+- Automatic registry backup of `HKLM\SYSTEM\CurrentControlSet\Services\NTP` before any changes.
 - Restart prompt when configuration changes are detected.
 - Transcript logging to repository `logs/` when run from a local clone.
 
@@ -215,3 +217,31 @@ minpoll 6 maxpoll 7
 ```
 
 This gives a 64–128 s adaptive polling range instead of the previous fixed 16 s (`minpoll 4 maxpoll 4`). A local GPS/PPS source is stable enough that faster polling adds no benefit and increases log and driver overhead.
+
+## Windows QoS Priority for NTP (Step 5)
+
+Step 5 creates two Windows Policy-based QoS rules using `New-NetQosPolicy`:
+
+| Policy name | Match | DSCP |
+|---|---|---|
+| NTP Outbound Priority | UDP destination port 123 | 46 (EF) |
+| NTP Inbound Priority | UDP source port 123 | 46 (EF) |
+
+DSCP 46 is the Expedited Forwarding (EF) per-hop behaviour — the same class used for VoIP. The Windows kernel network scheduler de-queues EF-marked packets ahead of best-effort traffic. On managed networks with DiffServ-aware switches and routers the marking is also honoured by the infrastructure.
+
+Behavior notes:
+- Requires Windows 8 / Server 2012 or later.
+- Any pre-existing policies with these names are removed before new ones are created.
+- Step can be skipped and re-run independently at any time.
+- On home/SOHO networks the benefit is limited to the local Windows scheduler; ISPs strip DSCP on internet traffic.
+- Policies are written to `HKLM\SOFTWARE\Policies\Microsoft\Windows\QoS`.
+
+## Registry Backup
+
+Immediately after the user confirms they want to proceed, the installer runs `Backup-NtpRegistry`:
+
+- Exports `HKLM\SYSTEM\CurrentControlSet\Services\NTP` using `reg export`.
+- Saves to a timestamped `.reg` file in the user’s **Downloads** folder, e.g. `NTP_registry_backup_20260328_120000.reg`.
+- Displays a Windows notification dialog confirming the backup path.
+- If the NTP service registry key does not yet exist (first-time install before Meinberg has run) the backup is silently skipped with an info message.
+- To restore: double-click the `.reg` file and confirm the import prompt.
