@@ -5,11 +5,14 @@ This implements interpretations A, B, C, and D from docs/ntp_traceability.md.
 """
 
 import csv
+import ipaddress
 import json
 import math
 import os
 import re
+import socket
 import sys
+import urllib.request
 from datetime import date, datetime, timedelta
 
 try:
@@ -132,6 +135,10 @@ else:
 
 MJD_EPOCH = date(1858, 11, 17)
 SQRT3 = math.sqrt(3.0)
+
+# Speed of light in single-mode fibre (km/s): c / refractive_index (n ≈ 1.467).
+# Used to compute the minimum one-way propagation delay from geographic distance.
+_FIBRE_SPEED_KMS = 299792.458 / 1.467   # ≈ 204,354 km/s
 
 # Color palette for server addresses (cycling through distinct colors)
 SERVER_COLORS = [
@@ -305,7 +312,7 @@ def load_folder_settings():
     return data
 
 
-def save_folder_settings(log_folder, export_folder):
+def save_folder_settings(log_folder, export_folder, observer_lat="", observer_lon=""):
     path = get_settings_file_path()
     parent = os.path.dirname(path)
     if parent and not os.path.isdir(parent):
@@ -314,6 +321,8 @@ def save_folder_settings(log_folder, export_folder):
     payload = {
         "log_folder": log_folder,
         "export_folder": export_folder,
+        "observer_lat": observer_lat,
+        "observer_lon": observer_lon,
     }
     handle = open(path, "w", encoding="utf-8")
     try:
@@ -764,7 +773,7 @@ def format_pit_section(pit):
         "Active reference server:            %s" % server_text,
         "",
         "Method: %s" % method_text,
-        "  Network asymmetry and offset scatter combined in quadrature.",
+        "  Asymmetry (rectangular 95%) and statistical terms (Gaussian k=2) combined in quadrature.",
         "",
         "Best-estimate offset at T:          %s" % format_ms(pit["best_offset"]),
         "  (loopstats freq at T:              %.6f ppm)" % pit["freq_ppm"],
@@ -773,15 +782,21 @@ def format_pit_section(pit):
         "",
         "Uncertainty components:",
         "  u_drift (residual between sync records): %s" % format_ms(pit["u_drift"]),
-        "  u_asymmetry (RTT/2/sqrt(3)):             %s" % format_ms(pit["u_asymmetry"]),
+        "  u_asymmetry (b_asym/sqrt(3)):            %s" % format_ms(pit["u_asymmetry"]),
         "    (mean RTT near T: %s, N=%d peer records)" % (format_ms(pit["mean_delay_near_T"]), pit["n_peer_near_T"]),
+        "    b_asym (RTT/2): %s%s" % (
+            format_ms(pit["b_asym_raw"]),
+            ("  →  tightened to %s  [%s]" % (format_ms(pit["b_asym"]), pit["server_location_note"]))
+            if pit.get("b_asym") is not None and pit["b_asym"] < pit["b_asym_raw"]
+            else ("  [%s]" % pit["server_location_note"]) if pit.get("server_location_note") else "",
+        ),
         "  u_scatter (stdev of loopstats offsets near T): %s" % format_ms(pit["u_scatter"]),
         "",
         "  u_combined (k=1):  %s" % format_ms(pit["u_combined"]),
-        "  U_expanded (k=2):  +/- %s  (~95%% confidence)" % format_ms(pit["u_expanded"]),
+        "  U_expanded (~95%%): +/- %s  [sqrt((0.95*RTT/2)^2 + (2*u_stat)^2)]" % format_ms(pit["u_expanded"]),
         "",
         "Corrected UTC time = PC time - (%s)" % format_ms(pit["best_offset"]),
-        "Accuracy of corrected time: +/- %s (k=2)" % format_ms(pit["u_expanded"]),
+        "Accuracy of corrected time: +/- %s (~95%%)" % format_ms(pit["u_expanded"]),
     ]
 
     # --- Alternative candidate-peer estimate ---
@@ -803,17 +818,276 @@ def format_pit_section(pit):
             "  Offset at poll near T (peerstats):   %s" % format_ms(pit["alt_best_offset"]),
             "  u_asymmetry (alt RTT/2/sqrt(3)):     %s" % format_ms(pit["alt_u_asymmetry"]),
             "  u_scatter   (alt peer jitter):       %s" % format_ms(pit["alt_u_scatter"]),
-            "  U_expanded  (k=2):  +/- %s  -- %s" % (format_ms(alt_exp), verdict),
+            "  U_expanded  (~95%%):  +/- %s  -- %s" % (format_ms(alt_exp), verdict),
         ]
         if is_better:
             lines.append(
-                "  *** Lower-uncertainty estimate:  offset = %s  +/- %s (k=2) ***" % (
+                "  *** Lower-uncertainty estimate:  offset = %s  +/- %s (~95%%) ***" % (
                     format_ms(pit["alt_best_offset"]), format_ms(alt_exp))
             )
     return lines
 
 
-def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_seconds=3600.0):
+def _haversine_km(lat1, lon1, lat2, lon2):
+    """Return the great-circle distance in km between two WGS-84 lat/lon points (degrees)."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2.0) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2.0) ** 2)
+    return R * 2.0 * math.asin(math.sqrt(max(0.0, min(1.0, a))))
+
+
+def load_known_servers(json_path):
+    """Load a national_utc_ntp_servers.json file and return a flat list of server-location dicts.
+
+    Each dict has keys:
+        hostnames       list[str]   canonical NTP hostnames for this authority
+        ips             list[str]   pre-resolved IPs (empty until populated at runtime)
+        lat             float       latitude of server site (degrees)
+        lon             float       longitude of server site (degrees)
+        location_note   str         human-readable description, e.g. "PTB, Braunschweig (curated)"
+
+    Entries without a "server_location" key are silently skipped.
+    Entries with no "ntp_servers" hostnames are also skipped.
+    """
+    try:
+        handle = open(json_path, "r", encoding="utf-8")
+        try:
+            data = json.load(handle)
+        finally:
+            handle.close()
+    except Exception:
+        return []
+
+    result = []
+    for entry in data.get("entries", []):
+        loc = entry.get("server_location")
+        if not loc:
+            continue
+        lat = loc.get("lat")
+        lon = loc.get("lon")
+        if lat is None or lon is None:
+            continue
+        hostnames = [h.lower() for h in entry.get("ntp_servers", []) if h]
+        if not hostnames:
+            continue
+        authority = entry.get("authority", "")
+        city = loc.get("city", "")
+        note = "%s%s (curated)" % (
+            ("%s, " % authority) if authority else "",
+            city if city else "known server",
+        )
+        result.append({
+            "hostnames": hostnames,
+            "ips": [],
+            "lat": float(lat),
+            "lon": float(lon),
+            "location_note": note,
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Persistent IP-location cache  (resources/ip_location_cache.json)
+# ---------------------------------------------------------------------------
+# Entries survive across runs and are refreshed after _IP_CACHE_MAX_DAYS days.
+# Structure:  { "ip_str": { lat, lon, location_note, source, cached_at } }
+# Only the server coordinates are stored; geo_km is observer-dependent and
+# recalculated each time from the cached lat/lon.
+# ---------------------------------------------------------------------------
+_ip_location_cache = {}
+_ip_cache_file_path = None
+_IP_CACHE_MAX_DAYS = 90
+
+
+def _load_ip_location_cache(path):
+    """Read ip_location_cache.json into memory.  Silent on any error."""
+    global _ip_location_cache, _ip_cache_file_path
+    _ip_cache_file_path = path
+    try:
+        handle = open(path, "r", encoding="utf-8")
+        try:
+            _ip_location_cache = json.load(handle)
+        finally:
+            handle.close()
+    except Exception:
+        _ip_location_cache = {}
+
+
+def _save_ip_location_cache():
+    """Write the in-memory cache to disk.  Silent on any error."""
+    if not _ip_cache_file_path:
+        return
+    try:
+        handle = open(_ip_cache_file_path, "w", encoding="utf-8")
+        try:
+            json.dump(_ip_location_cache, handle, indent=2)
+        finally:
+            handle.close()
+    except Exception:
+        pass
+
+
+def _cache_ip_location(ip, lat, lon, location_note, source):
+    """Store a resolved IP location in memory and flush to disk."""
+    _ip_location_cache[ip] = {
+        "lat": lat,
+        "lon": lon,
+        "location_note": location_note,
+        "source": source,
+        "cached_at": datetime.utcnow().strftime("%Y-%m-%d"),
+    }
+    _save_ip_location_cache()
+
+
+# In-process GeoIP cache so a single analysis run doesn't re-query the same IP.
+_geoip_cache = {}
+
+
+def geolocate_ip(ip):
+    """Look up the geographic coordinates of an IP address using ip-api.com.
+
+    Results are cached in-process.  Returns a dict with keys lat, lon, city,
+    country, or None on failure (network error, rate-limit, private IP, etc.).
+    Timeout is 5 seconds; failure is always silent.
+    """
+    if ip in _geoip_cache:
+        return _geoip_cache[ip]
+    result = None
+    try:
+        url = "http://ip-api.com/json/%s?fields=status,lat,lon,city,country" % ip
+        response = urllib.request.urlopen(url, timeout=5)
+        data = json.loads(response.read().decode("utf-8"))
+        if data.get("status") == "success":
+            result = {
+                "lat": float(data["lat"]),
+                "lon": float(data["lon"]),
+                "city": data.get("city", ""),
+                "country": data.get("country", ""),
+            }
+    except Exception:
+        pass
+    _geoip_cache[ip] = result
+    return result
+
+
+def resolve_server_location(server_ip, known_servers, observer_lat, observer_lon):
+    """Attempt to determine d_min (seconds) for an NTP server based on its IP address.
+
+    Lookup order:
+      1. Private / loopback / link-local IP  → d_min = 0 (local network)
+      2. reverse-DNS → match known_servers by hostname suffix
+      3. Direct IP match against known_servers pre-resolved IPs
+      4. No match → d_min = None (caller uses conservative RTT/2)
+
+    Parameters
+    ----------
+    server_ip : str
+        The IP address (or hostname) from peerstats column 3.
+    known_servers : list of dict or None
+        Output of load_known_servers().  None disables lookup.
+    observer_lat : float or None
+        Observer latitude in degrees.
+    observer_lon : float or None
+        Observer longitude in degrees.
+
+    Returns
+    -------
+    dict with keys:
+        d_min_s        float or None   minimum one-way propagation delay (seconds)
+        location_note  str             human-readable description of what matched
+        geo_km         float or None   geographic distance used (km)
+    """
+    _no_match = {"d_min_s": None, "location_note": "server location unknown", "geo_km": None}
+
+    if not server_ip:
+        return _no_match
+
+    # Step 1: private / loopback / link-local → local, no propagation uncertainty worth modelling.
+    try:
+        addr = ipaddress.ip_address(server_ip)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            return {"d_min_s": 0.0, "location_note": "local network (private IP)", "geo_km": 0.0}
+    except ValueError:
+        # Not a valid IP literal — treat as a hostname; fall through.
+        pass
+
+    # Step 2: persistent IP location cache (valid for _IP_CACHE_MAX_DAYS days).
+    cached = _ip_location_cache.get(server_ip)
+    if cached:
+        try:
+            cached_date = datetime.strptime(cached["cached_at"], "%Y-%m-%d")
+            age_days = (datetime.utcnow() - cached_date).days
+        except Exception:
+            age_days = _IP_CACHE_MAX_DAYS + 1  # treat corrupt date as expired
+        if age_days <= _IP_CACHE_MAX_DAYS:
+            if observer_lat is not None and observer_lon is not None:
+                geo_km = _haversine_km(observer_lat, observer_lon, cached["lat"], cached["lon"])
+                d_min_s = geo_km / _FIBRE_SPEED_KMS
+                note = "%s, %.0f km" % (cached["location_note"], geo_km)
+            else:
+                geo_km = None
+                d_min_s = None
+                note = cached["location_note"]
+            return {"d_min_s": d_min_s, "location_note": note, "geo_km": geo_km}
+
+    if observer_lat is None or observer_lon is None:
+        return _no_match
+
+    # Step 3: reverse DNS then match against known_servers by hostname/domain.
+    rdns_hostname = None
+    try:
+        rdns_hostname = socket.gethostbyaddr(server_ip)[0].lower()
+    except Exception:
+        pass
+
+    def _registered_domain(hostname):
+        """Return the registered domain (e.g. 'nist.gov') from a hostname string."""
+        parts = hostname.rstrip(".").split(".")
+        return ".".join(parts[-2:]) if len(parts) >= 2 else hostname
+
+    rdns_domain = _registered_domain(rdns_hostname) if rdns_hostname else None
+
+    # Registered-domain comparison handles sibling hostnames returned by rDNS
+    # (e.g. time-a-g.nist.gov reverse-resolves for an entry listing time.nist.gov).
+    for entry in (known_servers or []):
+        matched = False
+        if rdns_hostname:
+            for h in entry["hostnames"]:
+                if rdns_hostname == h or rdns_hostname.endswith("." + h) or h.endswith("." + rdns_hostname):
+                    matched = True
+                    break
+                if rdns_domain and _registered_domain(h) == rdns_domain:
+                    matched = True
+                    break
+        if matched:
+            geo_km = _haversine_km(observer_lat, observer_lon, entry["lat"], entry["lon"])
+            d_min_s = geo_km / _FIBRE_SPEED_KMS
+            note = entry["location_note"]
+            _cache_ip_location(server_ip, entry["lat"], entry["lon"], note, "curated")
+            return {
+                "d_min_s": d_min_s,
+                "location_note": "%s, %.0f km" % (note, geo_km),
+                "geo_km": geo_km,
+            }
+
+    # Step 4: GeoIP fallback via ip-api.com (in-process cached, silent on failure).
+    geo = geolocate_ip(server_ip)
+    if geo is not None:
+        geo_km = _haversine_km(observer_lat, observer_lon, geo["lat"], geo["lon"])
+        d_min_s = geo_km / _FIBRE_SPEED_KMS
+        parts = [p for p in [geo.get("city", ""), geo.get("country", "")] if p]
+        note = "%s (GeoIP)" % (", ".join(parts) if parts else server_ip)
+        _cache_ip_location(server_ip, geo["lat"], geo["lon"], note, "geoip")
+        return {"d_min_s": d_min_s, "location_note": "%s, %.0f km" % (note, geo_km), "geo_km": geo_km}
+
+    return _no_match
+
+
+def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_seconds=3600.0,
+                            known_servers=None, observer_lat=None, observer_lon=None):
     """Estimate the NTP offset and its uncertainty at a specific point in time.
 
     Parameters
@@ -829,6 +1103,14 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
     window_seconds : float
         Half-width of the time window used to gather nearby peer samples for
         the network uncertainty estimate (default ±1 hour).
+    known_servers : list of dict or None
+        Output of load_known_servers().  When provided together with
+        observer_lat/lon, enables geographic tightening of b_asym via
+        resolve_server_location().  Defaults to None (conservative RTT/2 used).
+    observer_lat : float or None
+        Observer latitude in decimal degrees.  Required for geographic tightening.
+    observer_lon : float or None
+        Observer longitude in decimal degrees.  Required for geographic tightening.
 
     Returns
     -------
@@ -839,13 +1121,16 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
         u_asymmetry                    -- network path asymmetry uncertainty (s)
         u_scatter                      -- NTP measurement scatter near T (s)
         u_combined                     -- combined standard uncertainty k=1 (s)
-        u_expanded                     -- expanded uncertainty k=2, ~95% (s)
+        u_expanded                     -- expanded uncertainty ~95% (s)
         gap_before_s                   -- seconds between T and the last loopstats record
         gap_after_s                    -- seconds between T and the next loopstats record (or None)
         freq_ppm                       -- freq correction in use at T (ppm)
         mean_delay_near_T              -- mean RTT of nearby peer records (s)
         n_peer_near_T                  -- count of peer records used for network estimate
         active_server_at_T             -- server address active at T (str or None)
+        b_asym_raw                     -- RTT/2 before any geographic tightening (s)
+        b_asym                         -- asymmetry bound used in expansion (s)
+        server_location_note           -- description of how server location was resolved
         note                           -- human-readable summary string
     """
     # Convert every loopstats row to a single comparable float: seconds since MJD epoch
@@ -940,8 +1225,29 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
 
     delays_near = [row.delay for row in network_peers]
     mean_delay_near = mean(delays_near) if delays_near else 0.0
-    # Half-RTT as worst-case one-way asymmetry bound; rectangular -> divide by sqrt(3)
-    u_asymmetry = (mean_delay_near / 2.0) / SQRT3
+    # Hard rectangular bound on one-way path asymmetry: RTT/2 in either direction.
+    # Applying k=2 to the rectangular standard uncertainty (RTT/2/sqrt(3)) alone produces
+    # an expanded interval ~15% wider than the 100% physical ceiling (RTT/2).  Instead,
+    # the rectangular 95% coverage (0.95 * b_asym) and the Gaussian statistical components
+    # (drift + scatter, k=2) are combined in quadrature so U_expanded stays within RTT/2.
+    b_asym_raw = mean_delay_near / 2.0
+    b_asym = b_asym_raw
+
+    # Geographic tightening: if the server location is known, the minimum one-way
+    # propagation delay (d_min = geo_distance / v_fibre) is symmetric and cannot
+    # be asymmetric.  The true asymmetry bound shrinks to max(RTT/2 - d_min, 0).
+    server_loc = resolve_server_location(
+        active_server_at_T or "",
+        known_servers,
+        observer_lat,
+        observer_lon,
+    )
+    d_min_s = server_loc["d_min_s"]
+    if d_min_s is not None:
+        b_asym = max(b_asym_raw - d_min_s, 0.0)
+    server_location_note = server_loc["location_note"]
+
+    u_asymmetry = b_asym / SQRT3               # rectangular standard uncertainty (for u_combined)
 
     # Scatter: standard deviation of offsets among nearby loopstats records.
     # Use a matching window around T.
@@ -953,7 +1259,10 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
     u_scatter = stdev(near_offsets) if len(near_offsets) >= 2 else 0.0
 
     u_combined = math.sqrt(u_drift * u_drift + u_asymmetry * u_asymmetry + u_scatter * u_scatter)
-    u_expanded = 2.0 * u_combined
+    # Expanded uncertainty: rectangular asymmetry at 95% of its hard bound, Gaussian
+    # statistical terms at k=2, combined in quadrature.
+    u_stat = math.sqrt(u_drift * u_drift + u_scatter * u_scatter)
+    u_expanded = math.sqrt((0.95 * b_asym) ** 2 + (2.0 * u_stat) ** 2)
 
     # --- Alternative low-uncertainty estimate from candidate peers ---
     # The loopstats offset is disciplined by the sys.peer only, so u_asymmetry above
@@ -997,7 +1306,8 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
         # Score each server by combined uncertainty; pick the minimum.
         best_score = None
         for addr, (gap, row) in by_server.items():
-            u_a = (row.delay / 2.0) / SQRT3
+            b_a = row.delay / 2.0
+            u_a = b_a / SQRT3
             u_s = row.jitter
             score = math.sqrt(u_a * u_a + u_s * u_s)
             if best_score is None or score < best_score:
@@ -1009,7 +1319,8 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
                 alt_u_scatter = u_s
                 alt_best_offset = row.offset
                 alt_u_combined = score
-                alt_u_expanded = 2.0 * score
+                # Same expansion as sys.peer: 95% rectangular asymmetry + k=2 Gaussian jitter.
+                alt_u_expanded = math.sqrt((0.95 * b_a) ** 2 + (2.0 * u_s) ** 2)
 
     note_parts = [
         "gap_before=%.1fs" % gap_before_s,
@@ -1017,10 +1328,12 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
         "u_drift=%s" % format_ms(u_drift),
         "u_asymmetry=%s" % format_ms(u_asymmetry),
         "u_scatter=%s" % format_ms(u_scatter),
-        "U_expanded(k=2)=+/-%s" % format_ms(u_expanded),
+        "U_expanded(~95%%)=+/-%s" % format_ms(u_expanded),
     ]
     if active_server_at_T:
         note_parts.insert(0, "server=%s" % active_server_at_T)
+    if d_min_s is not None and d_min_s > 0.0:
+        note_parts.append("b_asym_tightened=%s->%s" % (format_ms(b_asym_raw), format_ms(b_asym)))
 
     return {
         "query_mjd": query_mjd,
@@ -1039,6 +1352,9 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
         "mean_delay_near_T": mean_delay_near,
         "n_peer_near_T": len(network_peers),
         "active_server_at_T": active_server_at_T,
+        "b_asym_raw": b_asym_raw,
+        "b_asym": b_asym,
+        "server_location_note": server_location_note,
         "n_candidate_peers_near_T": n_candidate_peers_near_T,
         "alt_best_offset": alt_best_offset,
         "alt_u_asymmetry": alt_u_asymmetry,
@@ -1052,7 +1368,7 @@ def estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows, window_s
     }
 
 
-def analyze(option, loop_rows, peer_rows):
+def analyze(option, loop_rows, peer_rows, known_servers=None, observer_lat=None, observer_lon=None):
     if not loop_rows:
         raise RuntimeError("No usable loopstats rows were found for the selected day.")
     if not peer_rows:
@@ -1130,7 +1446,9 @@ def analyze(option, loop_rows, peer_rows):
     # Callers can also call estimate_offset_at_time() directly with any (mjd, sec) pair.
     sorted_loop_for_pit = sorted(loop_rows, key=lambda r: (r.mjd, r.sec_of_day))
     last_loop = sorted_loop_for_pit[-1]
-    pit_result = estimate_offset_at_time(last_loop.mjd, last_loop.sec_of_day, loop_rows, peer_rows)
+    pit_result = estimate_offset_at_time(last_loop.mjd, last_loop.sec_of_day, loop_rows, peer_rows,
+                                         known_servers=known_servers,
+                                         observer_lat=observer_lat, observer_lon=observer_lon)
 
     mjds = sorted(set([row.mjd for row in loop_rows] + [row.mjd for row in peer_rows]))
 
@@ -1392,6 +1710,15 @@ class AnalyzerForm(Form):
         self._last_peer_rows = []
         self._last_result = None
         self._last_aggregate_report = ""
+        _known_servers_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "resources", "national_utc_ntp_servers.json",
+        )
+        self._known_servers = load_known_servers(os.path.normpath(_known_servers_path))
+        _load_ip_location_cache(os.path.normpath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "resources", "ip_location_cache.json",
+        )))
 
         default_font = Font("Segoe UI", 9)
         bold_font = Font("Segoe UI", 9, FontStyle.Bold)
@@ -1545,6 +1872,50 @@ class AnalyzerForm(Form):
         self.lbl_pit_note.Location = Point(8, 450)
         self.lbl_pit_note.Size = Size(280, 34)
         lp.Controls.Add(self.lbl_pit_note)
+
+        self.lbl_observer = Label()
+        self.lbl_observer.Text = "Observer location (decimal degrees):"
+        self.lbl_observer.Location = Point(8, 490)
+        self.lbl_observer.Size = Size(280, 20)
+        lp.Controls.Add(self.lbl_observer)
+
+        self.lbl_observer_lat = Label()
+        self.lbl_observer_lat.Text = "Lat:"
+        self.lbl_observer_lat.Location = Point(8, 515)
+        self.lbl_observer_lat.Size = Size(28, 20)
+        lp.Controls.Add(self.lbl_observer_lat)
+
+        self.txt_observer_lat = TextBox()
+        self.txt_observer_lat.Text = ""
+        self.txt_observer_lat.Location = Point(36, 512)
+        self.txt_observer_lat.Size = Size(80, 24)
+        self.txt_observer_lat.Font = default_font
+        lp.Controls.Add(self.txt_observer_lat)
+
+        self.lbl_observer_comma = Label()
+        self.lbl_observer_comma.Text = ""
+        self.lbl_observer_comma.Location = Point(119, 515)
+        self.lbl_observer_comma.Size = Size(4, 20)
+        lp.Controls.Add(self.lbl_observer_comma)
+
+        self.lbl_observer_lon = Label()
+        self.lbl_observer_lon.Text = "Lon:"
+        self.lbl_observer_lon.Location = Point(124, 515)
+        self.lbl_observer_lon.Size = Size(28, 20)
+        lp.Controls.Add(self.lbl_observer_lon)
+
+        self.txt_observer_lon = TextBox()
+        self.txt_observer_lon.Text = ""
+        self.txt_observer_lon.Location = Point(152, 512)
+        self.txt_observer_lon.Size = Size(80, 24)
+        self.txt_observer_lon.Font = default_font
+        lp.Controls.Add(self.txt_observer_lon)
+
+        self.lbl_observer_note = Label()
+        self.lbl_observer_note.Text = "Used to tighten asymmetry bound for known servers"
+        self.lbl_observer_note.Location = Point(8, 540)
+        self.lbl_observer_note.Size = Size(280, 20)
+        lp.Controls.Add(self.lbl_observer_note)
 
         self.btn_analyze = Button()
         self.btn_analyze.Text = "Analyze"
@@ -1799,6 +2170,35 @@ class AnalyzerForm(Form):
         self.lbl_pit_note.Size = Size(full_w, label_h * 2)
         y += label_h * 2 + inter
 
+        self.lbl_observer.Location = Point(margin, y)
+        self.lbl_observer.Size = Size(full_w, label_h)
+        y += label_h
+
+        lat_lbl_w = 28
+        lat_w = 80
+        gap = 8
+        lon_lbl_w = 28
+        lon_w = 80
+        x = margin
+        self.lbl_observer_lat.Location = Point(x, y + 3)
+        self.lbl_observer_lat.Size = Size(lat_lbl_w, label_h)
+        x += lat_lbl_w
+        self.txt_observer_lat.Location = Point(x, y)
+        self.txt_observer_lat.Size = Size(lat_w, text_h)
+        x += lat_w + gap
+        self.lbl_observer_comma.Location = Point(x, y + 3)
+        self.lbl_observer_comma.Size = Size(4, label_h)
+        self.lbl_observer_lon.Location = Point(x, y + 3)
+        self.lbl_observer_lon.Size = Size(lon_lbl_w, label_h)
+        x += lon_lbl_w
+        self.txt_observer_lon.Location = Point(x, y)
+        self.txt_observer_lon.Size = Size(lon_w, text_h)
+        y += text_h + 2
+
+        self.lbl_observer_note.Location = Point(margin, y)
+        self.lbl_observer_note.Size = Size(full_w, label_h)
+        y += label_h + inter
+
         content_top = y
         status_height = 24
         output_height = max(120, panel.ClientSize.Height - content_top - status_height)
@@ -1866,7 +2266,7 @@ class AnalyzerForm(Form):
         container.Controls.Add(plot_box)
         return container
 
-    def update_delay_header_legend(self, server_to_color, unique_servers):
+    def update_delay_header_legend(self, server_to_color, unique_servers, server_to_km=None):
         if not hasattr(self, "chart_delay") or self.chart_delay is None:
             return
 
@@ -1890,7 +2290,7 @@ class AnalyzerForm(Form):
         x_pos = start_x
 
         for server in unique_servers:
-            if x_pos > self.chart_delay.ClientSize.Width - 110:
+            if x_pos > self.chart_delay.ClientSize.Width - 178:
                 break
 
             swatch = Label()
@@ -1902,14 +2302,17 @@ class AnalyzerForm(Form):
             self._delay_legend_controls.append(swatch)
 
             label = Label()
-            label.Text = server if server else "Unknown"
+            server_label_text = server if server else "Unknown"
+            if server_to_km and server in server_to_km:
+                server_label_text = "%s (%d km)" % (server_label_text, int(round(server_to_km[server])))
+            label.Text = server_label_text
             label.Font = legend_font
             label.Location = Point(x_pos + 22, legend_y - 1)
-            label.Size = Size(90, 20)
+            label.Size = Size(150, 20)
             self.chart_delay.Controls.Add(label)
             self._delay_legend_controls.append(label)
 
-            x_pos += 116
+            x_pos += 178
 
     def _get_plot_box(self, container):
         for ctrl in container.Controls:
@@ -2232,7 +2635,20 @@ class AnalyzerForm(Form):
         unique_servers = sorted(set([srv for _stamp, srv in peer_timeline]))
         if not unique_servers and delay_points:
             unique_servers = sorted(set([srv for _stamp, _value, srv in delay_points]))
-        self.update_delay_header_legend(server_to_color, unique_servers)
+        obs_lat, obs_lon = self._get_observer_coords()
+        print("[legend debug] obs_lat=%r obs_lon=%r" % (obs_lat, obs_lon))
+        print("[legend debug] known_servers count=%d" % len(self._known_servers))
+        print("[legend debug] server_to_color keys=%r" % list(server_to_color.keys()))
+        server_to_km = {}
+        for _srv in list(server_to_color.keys()):
+            if _srv:
+                _loc = resolve_server_location(_srv, self._known_servers, obs_lat, obs_lon)
+                print("[legend debug] server=%r -> d_min_s=%r geo_km=%r note=%r" % (
+                    _srv, _loc["d_min_s"], _loc["geo_km"], _loc["location_note"]))
+                if _loc["geo_km"] is not None:
+                    server_to_km[_srv] = _loc["geo_km"]
+        print("[legend debug] server_to_km=%r" % server_to_km)
+        self.update_delay_header_legend(server_to_color, unique_servers, server_to_km)
 
         self._plot_data = {
             "delay": {
@@ -2290,6 +2706,24 @@ class AnalyzerForm(Form):
 
         self.invalidate_plots()
 
+    def _get_observer_coords(self):
+        """Parse observer lat/lon text boxes. Returns (lat, lon) as floats, or (None, None) if invalid."""
+        try:
+            lat = float(self.txt_observer_lat.Text.strip())
+            lon = float(self.txt_observer_lon.Text.strip())
+        except (ValueError, AttributeError):
+            return None, None
+        # Detect swapped entry: latitude must be -90..90, longitude -180..180.
+        lat_valid = -90.0 <= lat <= 90.0
+        lon_valid = -180.0 <= lon <= 180.0
+        if not lat_valid and lon_valid and -90.0 <= lon <= 90.0 and -180.0 <= lat <= 180.0:
+            print("[observer] WARNING: lat=%r lon=%r looks swapped — auto-correcting to lat=%r lon=%r" % (lat, lon, lon, lat))
+            lat, lon = lon, lat
+        elif not lat_valid or not lon_valid:
+            print("[observer] WARNING: lat=%r lon=%r out of valid range — ignored" % (lat, lon))
+            return None, None
+        return lat, lon
+
     def prefill_defaults(self):
         saved = load_folder_settings()
         saved_log = saved.get("log_folder", "").strip()
@@ -2309,6 +2743,8 @@ class AnalyzerForm(Form):
 
         if not self.txt_export_folder.Text.strip() and self.txt_log_folder.Text.strip():
             self.txt_export_folder.Text = os.path.join(self.txt_log_folder.Text.strip(), "reports")
+        self.txt_observer_lat.Text = saved.get("observer_lat", "").strip()
+        self.txt_observer_lon.Text = saved.get("observer_lon", "").strip()
         self.on_export_toggle(None, None)
         self.scan_options()
 
@@ -2329,14 +2765,16 @@ class AnalyzerForm(Form):
             self.txt_log_folder.Text = chosen
             if not self.txt_export_folder.Text.strip():
                 self.txt_export_folder.Text = os.path.join(chosen, "reports")
-            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip(),
+                                  self.txt_observer_lat.Text.strip(), self.txt_observer_lon.Text.strip())
             self.scan_options()
 
     def on_browse_export(self, sender, event):
         chosen = self.choose_folder(self.txt_export_folder.Text.strip())
         if chosen:
             self.txt_export_folder.Text = chosen
-            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip(),
+                                  self.txt_observer_lat.Text.strip(), self.txt_observer_lon.Text.strip())
 
     def on_export_toggle(self, sender, event):
         enabled = self.chk_export.Checked
@@ -2344,7 +2782,8 @@ class AnalyzerForm(Form):
         self.btn_browse_export.Enabled = enabled
 
     def on_scan(self, sender, event):
-        save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+        save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip(),
+                              self.txt_observer_lat.Text.strip(), self.txt_observer_lon.Text.strip())
         self.scan_options()
 
     def scan_options(self):
@@ -2396,7 +2835,10 @@ class AnalyzerForm(Form):
             option = self.get_selected_option()
             loop_rows = parse_loopstats(option.loop_path, option.target_mjd)
             peer_rows = parse_peerstats(option.peer_path, option.target_mjd)
-            result = analyze(option, loop_rows, peer_rows)
+            obs_lat, obs_lon = self._get_observer_coords()
+            result = analyze(option, loop_rows, peer_rows,
+                             known_servers=self._known_servers,
+                             observer_lat=obs_lat, observer_lon=obs_lon)
             self._last_loop_rows = loop_rows
             self._last_peer_rows = peer_rows
             self._last_result = result
@@ -2406,7 +2848,8 @@ class AnalyzerForm(Form):
             pit = self._compute_pit_for_display(loop_rows, peer_rows, result)
             self._show_combined_output(pit)
 
-            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip())
+            save_folder_settings(self.txt_log_folder.Text.strip(), self.txt_export_folder.Text.strip(),
+                                  self.txt_observer_lat.Text.strip(), self.txt_observer_lon.Text.strip())
 
             if self.chk_export.Checked:
                 export_folder = self.txt_export_folder.Text.strip().strip('"')
@@ -2430,7 +2873,10 @@ class AnalyzerForm(Form):
             try:
                 query_sec = _parse_pit_time_sec(hms_text)
                 query_mjd = max(result.mjds) if result.mjds else max(r.mjd for r in loop_rows)
-                return estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows)
+                obs_lat, obs_lon = self._get_observer_coords()
+                return estimate_offset_at_time(query_mjd, query_sec, loop_rows, peer_rows,
+                                               known_servers=self._known_servers,
+                                               observer_lat=obs_lat, observer_lon=obs_lon)
             except Exception as err:
                 self.show_error("Invalid point-in-time entry: %s\r\nUsing last loopstats record." % str(err))
         return result.pit_result
@@ -2471,7 +2917,10 @@ class AnalyzerForm(Form):
                 return
             query_sec = _parse_pit_time_sec(hms_text)
             query_mjd = max(self._last_result.mjds) if self._last_result and self._last_result.mjds else max(r.mjd for r in self._last_loop_rows)
-            pit = estimate_offset_at_time(query_mjd, query_sec, self._last_loop_rows, self._last_peer_rows)
+            obs_lat, obs_lon = self._get_observer_coords()
+            pit = estimate_offset_at_time(query_mjd, query_sec, self._last_loop_rows, self._last_peer_rows,
+                                          known_servers=self._known_servers,
+                                          observer_lat=obs_lat, observer_lon=obs_lon)
             self._show_combined_output(pit)
             self._update_pit_result_display(pit)
             self.set_status("Point-in-time estimate calculated for %s." % hms_text)

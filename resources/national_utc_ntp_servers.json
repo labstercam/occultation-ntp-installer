@@ -24,6 +24,170 @@
       ]
     },
     {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "groups": ["G20"],
+      "authority": "NMI (Sydney)",
+      "utc_scale": "UTC(AUS)",
+      "ntp_servers": ["ntp.nmi.gov.au", "ntp.sydney.nmi.gov.au", "ntp.sydney2.nmi.gov.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.industry.gov.au/national-measurement-institute"],
+      "server_location": {
+        "city": "North Ryde, Sydney",
+        "lat": -33.797,
+        "lon": 151.124,
+        "source": "NMI, 105 Delhi Road, North Ryde NSW"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "groups": ["G20"],
+      "authority": "NMI (Melbourne)",
+      "utc_scale": "UTC(AUS)",
+      "ntp_servers": ["ntp.melbourne.nmi.gov.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.industry.gov.au/national-measurement-institute"],
+      "server_location": {
+        "city": "Melbourne, VIC",
+        "lat": -37.815,
+        "lon": 144.970,
+        "source": "NMI Melbourne node (city-level, ±5 km)"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "groups": ["G20"],
+      "authority": "NMI (Perth)",
+      "utc_scale": "UTC(AUS)",
+      "ntp_servers": ["ntp.perth.nmi.gov.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.industry.gov.au/national-measurement-institute"],
+      "server_location": {
+        "city": "Perth, WA",
+        "lat": -31.952,
+        "lon": 115.862,
+        "source": "NMI Perth node (city-level, ±5 km)"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "groups": ["G20"],
+      "authority": "NMI (Adelaide)",
+      "utc_scale": "UTC(AUS)",
+      "ntp_servers": ["ntp.adelaide.nmi.gov.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.industry.gov.au/national-measurement-institute"],
+      "server_location": {
+        "city": "Adelaide, SA",
+        "lat": -34.926,
+        "lon": 138.600,
+        "source": "NMI Adelaide node (city-level, ±5 km)"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "groups": ["G20"],
+      "authority": "NMI (Brisbane)",
+      "utc_scale": "UTC(AUS)",
+      "ntp_servers": ["ntp.brisbane.nmi.gov.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.industry.gov.au/national-measurement-institute"],
+      "server_location": {
+        "city": "Brisbane, QLD",
+        "lat": -27.457,
+        "lon": 153.026,
+        "source": "NMI Brisbane node (city-level, ±5 km)"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "authority": "University of Melbourne",
+      "ntp_servers": ["ntp.unimelb.edu.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.unimelb.edu.au/"],
+      "server_location": {
+        "city": "Parkville, Melbourne",
+        "lat": -37.798,
+        "lon": 144.961,
+        "source": "University of Melbourne, Grattan Street, Parkville"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "authority": "Australian National University (ANU)",
+      "ntp_servers": ["ntp.anu.edu.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.anu.edu.au/"],
+      "server_location": {
+        "city": "Acton, Canberra",
+        "lat": -35.278,
+        "lon": 149.119,
+        "source": "ANU, Sullivans Creek Road, Acton ACT"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "authority": "University of Adelaide",
+      "ntp_servers": ["ntp.adelaide.edu.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.adelaide.edu.au/"],
+      "server_location": {
+        "city": "Adelaide, SA",
+        "lat": -34.921,
+        "lon": 138.604,
+        "source": "University of Adelaide, North Terrace campus"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "authority": "University of Tasmania (UTAS)",
+      "ntp_servers": ["ntp.utas.edu.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.utas.edu.au/"],
+      "server_location": {
+        "city": "Sandy Bay, Hobart",
+        "lat": -42.899,
+        "lon": 147.328,
+        "source": "UTas, Churchill Avenue, Sandy Bay TAS"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "authority": "Monash University",
+      "ntp_servers": ["ntp.monash.edu.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.monash.edu/"],
+      "server_location": {
+        "city": "Clayton, Melbourne",
+        "lat": -37.914,
+        "lon": 145.134,
+        "source": "Monash University, Wellington Road, Clayton VIC"
+      }
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "authority": "Curtin University",
+      "ntp_servers": ["ntp.curtin.edu.au"],
+      "status": "verified_public_hostname",
+      "source_urls": ["https://www.curtin.edu.au/"],
+      "server_location": {
+        "city": "Bentley, Perth",
+        "lat": -32.006,
+        "lon": 115.894,
+        "source": "Curtin University, Kent Street, Bentley WA"
+      }
+    },
+    {
       "country_code": "NZ",
       "country_name": "New Zealand",
       "groups": ["Requested"],
@@ -33,7 +197,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.measurement.govt.nz/about-us/official-new-zealand-time/about-time"
-      ]
+      ],
+      "server_location": {
+        "city": "Lower Hutt",
+        "lat": -41.222,
+        "lon": 174.942,
+        "source": "MSL, 69 Gracefield Road, Lower Hutt, NZ"
+      }
     },
     {
       "country_code": "US",
@@ -57,7 +227,13 @@
       "source_urls": [
         "https://www.nist.gov/pml/time-and-frequency-division/time-distribution/internet-time-service-its",
         "https://tf.nist.gov/tf-cgi/servers.cgi"
-      ]
+      ],
+      "server_location": {
+        "city": "Gaithersburg, MD",
+        "lat": 39.133,
+        "lon": -77.215,
+        "source": "NIST, 100 Bureau Drive, Gaithersburg MD (b-servers at Boulder 39.991,-105.262; wwv-servers at Fort Collins 40.680,-105.043)"
+      }
     },
     {
       "country_code": "JP",
@@ -69,7 +245,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.nict.go.jp/en/sts/ntp.html"
-      ]
+      ],
+      "server_location": {
+        "city": "Koganei, Tokyo",
+        "lat": 35.709,
+        "lon": 139.488,
+        "source": "NICT, 4-2-1 Nukui-Kitamachi, Koganei, Tokyo"
+      }
     },
     {
       "country_code": "KR",
@@ -82,7 +264,13 @@
       "source_urls": [
         "https://www.kriss.re.kr/eng/",
         "https://time.kriss.re.kr/"
-      ]
+      ],
+      "server_location": {
+        "city": "Daejeon",
+        "lat": 36.373,
+        "lon": 127.381,
+        "source": "KRISS, 267 Gajeong-ro, Yuseong-gu, Daejeon"
+      }
     },
     {
       "country_code": "UK",
@@ -95,7 +283,13 @@
       "source_urls": [
         "https://www.npl.co.uk/products-services/time-frequency/network-time-protocol",
         "https://www.npl.co.uk/getattachment/7c097457-5a1f-436f-af7b-930634680c5d/its_user_guide.pdf?lang=en-US"
-      ]
+      ],
+      "server_location": {
+        "city": "Teddington, London",
+        "lat": 51.426,
+        "lon": -0.344,
+        "source": "NPL, Hampton Road, Teddington TW11 0LW"
+      }
     },
     {
       "country_code": "FR",
@@ -107,7 +301,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://observatoiredeparis.psl.eu/services-de-l-heure.html"
-      ]
+      ],
+      "server_location": {
+        "city": "Paris",
+        "lat": 48.836,
+        "lon": 2.335,
+        "source": "Observatoire de Paris (SYRTE), 61 avenue de l'Observatoire, 75014 Paris"
+      }
     },
     {
       "country_code": "DE",
@@ -123,7 +323,13 @@
         "https://ptbtime2.ptb.de/",
         "https://ptbtime3.ptb.de/",
         "https://ptbtime4.ptb.de/"
-      ]
+      ],
+      "server_location": {
+        "city": "Braunschweig",
+        "lat": 52.295,
+        "lon": 10.464,
+        "source": "PTB, Bundesallee 100, 38116 Braunschweig"
+      }
     },
     {
       "country_code": "IT",
@@ -138,7 +344,13 @@
         "https://ntp1.inrim.it/",
         "https://ntp2.inrim.it/",
         "https://time.inrim.it/"
-      ]
+      ],
+      "server_location": {
+        "city": "Turin",
+        "lat": 45.030,
+        "lon": 7.638,
+        "source": "INRiM, Strada delle Cacce 91, 10135 Turin"
+      }
     },
     {
       "country_code": "CA",
@@ -151,7 +363,13 @@
       "source_urls": [
         "https://nrc.canada.ca/en/certifications-evaluations-standards/canadas-official-time",
         "https://nrc.canada.ca/en/certifications-evaluations-standards/canadas-official-time/network-time-protocol-ntp"
-      ]
+      ],
+      "server_location": {
+        "city": "Ottawa, ON",
+        "lat": 45.430,
+        "lon": -75.620,
+        "source": "NRC Canada, 1200 Montreal Road, Ottawa ON"
+      }
     },
     {
       "country_code": "CN",
@@ -164,7 +382,13 @@
       "source_urls": [
         "http://www.ntsc.ac.cn/",
         "https://ntp.ntsc.ac.cn/"
-      ]
+      ],
+      "server_location": {
+        "city": "Lintong, Xi'an",
+        "lat": 34.376,
+        "lon": 109.215,
+        "source": "NTSC Lintong timing station, Xi'an (Shaanxi); city HQ ~34.233, 108.912"
+      }
     },
     {
       "country_code": "MX",
@@ -176,7 +400,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.cenam.mx/hora_oficial/default.aspx"
-      ]
+      ],
+      "server_location": {
+        "city": "El Marques, Queretaro",
+        "lat": 20.662,
+        "lon": -100.348,
+        "source": "CENAM, km 4.5 Carretera a Los Cues, El Marques, Queretaro"
+      }
     },
     {
       "country_code": "AR",
@@ -188,7 +418,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.hidro.gob.ar/"
-      ]
+      ],
+      "server_location": {
+        "city": "Buenos Aires",
+        "lat": -34.639,
+        "lon": -58.369,
+        "source": "SHN, Av. Montes de Oca 2124, Buenos Aires"
+      }
     },
     {
       "country_code": "BR",
@@ -200,7 +436,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://ntp.br/"
-      ]
+      ],
+      "server_location": {
+        "city": "Sao Paulo",
+        "lat": -23.594,
+        "lon": -46.688,
+        "source": "NTP.br / NIC.br, WTC Av. Nacoes Unidas 11541, Sao Paulo"
+      }
     },
     {
       "country_code": "IN",
@@ -212,7 +454,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.nplindia.in/"
-      ]
+      ],
+      "server_location": {
+        "city": "New Delhi",
+        "lat": 28.638,
+        "lon": 77.165,
+        "source": "CSIR-NPL, Dr. K.S. Krishnan Marg, New Delhi 110012"
+      }
     },
     {
       "country_code": "ID",
@@ -224,7 +472,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.bmkg.go.id/"
-      ]
+      ],
+      "server_location": {
+        "city": "Jakarta",
+        "lat": -6.174,
+        "lon": 106.848,
+        "source": "BMKG, Jl. Angkasa I No. 2, Kemayoran, Jakarta"
+      }
     },
     {
       "country_code": "RU",
@@ -236,7 +490,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.vniiftri.ru/"
-      ]
+      ],
+      "server_location": {
+        "city": "Mendeleevo, Moscow Oblast",
+        "lat": 56.033,
+        "lon": 37.218,
+        "source": "VNIIFTRI, Mendeleevo (ntp1-4); vniiftri.khv.ru/vniiftri2.khv.ru at Khabarovsk 48.480, 135.082 (~6000 km east)"
+      }
     },
     {
       "country_code": "SA",
@@ -248,7 +508,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.saso.gov.sa/"
-      ]
+      ],
+      "server_location": {
+        "city": "Riyadh",
+        "lat": 24.694,
+        "lon": 46.756,
+        "source": "SASO, Olaya district, Riyadh"
+      }
     },
     {
       "country_code": "ZA",
@@ -261,7 +527,13 @@
       "usage_note": "Official server time.nmisa.org should only be used by NTP servers, not by personal computers.",
       "source_urls": [
         "https://www.nmisa.org/"
-      ]
+      ],
+      "server_location": {
+        "city": "Pretoria",
+        "lat": -25.762,
+        "lon": 28.267,
+        "source": "NMISA at CSIR, Meiring Naude Road, Brummeria, Pretoria"
+      }
     },
     {
       "country_code": "TR",
@@ -273,7 +545,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://ume.tubitak.gov.tr/"
-      ]
+      ],
+      "server_location": {
+        "city": "Gebze, Kocaeli",
+        "lat": 40.802,
+        "lon": 29.441,
+        "source": "TUBITAK UME, P.K. 54, 41470 Gebze (Kocaeli)"
+      }
     },
     {
       "country_code": "ES",
@@ -286,7 +564,13 @@
       "source_urls": [
         "https://www.roa.es/",
         "https://hora.roa.es/"
-      ]
+      ],
+      "server_location": {
+        "city": "San Fernando, Cadiz",
+        "lat": 36.464,
+        "lon": -6.205,
+        "source": "Real Observatorio de la Armada (ROA), Cecilio Pujazon s/n, San Fernando"
+      }
     },
     {
       "country_code": "NL",
@@ -298,7 +582,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.vsl.nl/en/services/calibrations/time-and-frequency"
-      ]
+      ],
+      "server_location": {
+        "city": "Delft",
+        "lat": 51.994,
+        "lon": 4.369,
+        "source": "VSL, Thijsseweg 11, 2629 JA Delft"
+      }
     },
     {
       "country_code": "CH",
@@ -310,7 +600,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.metas.ch/"
-      ]
+      ],
+      "server_location": {
+        "city": "Wabern, Bern",
+        "lat": 46.921,
+        "lon": 7.459,
+        "source": "METAS, Lindenweg 50, 3084 Wabern bei Bern"
+      }
     },
     {
       "country_code": "SE",
@@ -322,7 +618,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.pts.se/"
-      ]
+      ],
+      "server_location": {
+        "city": "Stockholm",
+        "lat": 59.334,
+        "lon": 18.019,
+        "source": "Netnod, Franzengatan 5, Stockholm"
+      }
     },
     {
       "country_code": "NO",
@@ -334,7 +636,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.justervesenet.no/"
-      ]
+      ],
+      "server_location": {
+        "city": "Kjeller, Akershus",
+        "lat": 59.977,
+        "lon": 11.080,
+        "source": "Justervesenet, Fetveien 99, 2007 Kjeller"
+      }
     },
     {
       "country_code": "PL",
@@ -346,7 +654,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.gum.gov.pl/"
-      ]
+      ],
+      "server_location": {
+        "city": "Warsaw",
+        "lat": 52.239,
+        "lon": 21.013,
+        "source": "GUM, ul. Elektoralna 2, 00-139 Warsaw"
+      }
     },
     {
       "country_code": "BE",
@@ -358,7 +672,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://betime.be/en/services/ntp-intro.php"
-      ]
+      ],
+      "server_location": {
+        "city": "Uccle, Brussels",
+        "lat": 50.799,
+        "lon": 4.358,
+        "source": "ROB, Avenue Circulaire 3, B-1180 Uccle, Brussels"
+      }
     },
     {
       "country_code": "AT",
@@ -370,7 +690,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.bev.gv.at/"
-      ]
+      ],
+      "server_location": {
+        "city": "Vienna",
+        "lat": 48.224,
+        "lon": 16.316,
+        "source": "BEV, Arltgasse 35, 1160 Vienna"
+      }
     },
     {
       "country_code": "DK",
@@ -382,7 +708,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://dfm.dk/"
-      ]
+      ],
+      "server_location": {
+        "city": "Kongens Lyngby",
+        "lat": 55.786,
+        "lon": 12.523,
+        "source": "DFM at DTU, Matematiktorvet 307-308, 2800 Kongens Lyngby (NOT Taastrup)"
+      }
     },
     {
       "country_code": "FI",
@@ -394,7 +726,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.vttresearch.com/en/services/metrology/mikes-metrology"
-      ]
+      ],
+      "server_location": {
+        "city": "Espoo",
+        "lat": 60.185,
+        "lon": 24.828,
+        "source": "VTT MIKES, Tekniikantie 1, 02150 Otaniemi, Espoo"
+      }
     },
     {
       "country_code": "IE",
@@ -408,7 +746,13 @@
       "source_urls": [
         "https://www.universityofgalway.ie/",
         "https://www.nsai.ie/"
-      ]
+      ],
+      "server_location": {
+        "city": "Galway",
+        "lat": 53.281,
+        "lon": -9.060,
+        "source": "University of Galway, University Road, Galway H91 TK33"
+      }
     },
     {
       "country_code": "PT",
@@ -420,7 +764,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://tecnico.ulisboa.pt/"
-      ]
+      ],
+      "server_location": {
+        "city": "Lisbon",
+        "lat": 38.736,
+        "lon": -9.139,
+        "source": "IST (Tecnico Lisboa), Av. Rovisco Pais 1, 1049-001 Lisbon"
+      }
     },
     {
       "country_code": "CZ",
@@ -443,7 +793,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.shoa.cl/"
-      ]
+      ],
+      "server_location": {
+        "city": "Valparaiso",
+        "lat": -33.034,
+        "lon": -71.647,
+        "source": "SHOA, Errazuriz 232, Playa Ancha, Valparaiso"
+      }
     },
     {
       "country_code": "IL",
@@ -455,7 +811,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.isoc.org.il/"
-      ]
+      ],
+      "server_location": {
+        "city": "Tel Aviv",
+        "lat": 32.072,
+        "lon": 34.788,
+        "source": "IIX/ISOC-IL, Tel Aviv metro area (city-level, ±2 km)"
+      }
     },
     {
       "country_code": "SG",
@@ -467,7 +829,13 @@
       "status": "verified_public_hostname",
       "source_urls": [
         "https://www.nmc.a-star.edu.sg/"
-      ]
+      ],
+      "server_location": {
+        "city": "Singapore",
+        "lat": 1.299,
+        "lon": 103.787,
+        "source": "NMC (A*STAR), 1 Science Park Drive, Singapore 118221"
+      }
     },
     {
       "country_code": "AE",

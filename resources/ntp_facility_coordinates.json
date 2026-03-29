@@ -1,0 +1,684 @@
+{
+  "generated_at_utc": "2026-03-28T00:00:00Z",
+  "purpose": "Physical facility coordinates (WGS84, ±0.001° / ~100 m precision target) for national metrology institutes and university NTP server hosts. Coordinates are for the primary lab or campus building unless noted. Source confidence is documented per entry.",
+  "schema_notes": [
+    "lat/lon to 3 decimal places (≈111 m per 0.001° in latitude).",
+    "source_note documents the derivation method and confidence level.",
+    "source_urls are authoritative or reference pages used to confirm the address; Wikipedia GeoHack coords are cited where extracted from the infobox.",
+    "Entries marked '~' or 'estimated' have positional uncertainty of ±0.5–2 km; treat as city-level rather than gate-level coordinates.",
+    "NMI Australia state facilities (Melbourne, Perth, Adelaide, Brisbane) have confirmed NTP hostnames (ntp.XX.nmi.gov.au) but exact building addresses are not publicly documented; coordinates are regional office estimates."
+  ],
+  "entries": [
+    {
+      "id": 1,
+      "authority": "MSL New Zealand (Measurement Standards Laboratory)",
+      "facility": "Gracefield Research Centre",
+      "address": "69 Gracefield Road, Lower Hutt 5010, New Zealand",
+      "city": "Lower Hutt",
+      "lat": -41.222,
+      "lon": 174.942,
+      "source_note": "MSL NZ operates UTC(MSL) within Callaghan Innovation's Gracefield campus. Coordinates from OSM / satellite imagery for 69 Gracefield Road building cluster. NTP pool: pool.msltime.measurement.govt.nz. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.measurement.govt.nz/about-us/official-new-zealand-time/about-time",
+        "https://www.callaghaninnovation.govt.nz/about-us/where-we-are/"
+      ]
+    },
+    {
+      "id": 2,
+      "authority": "NIST USA",
+      "facility": "NIST Gaithersburg Campus",
+      "address": "100 Bureau Drive, Gaithersburg, MD 20899, USA",
+      "city": "Gaithersburg, MD",
+      "lat": 39.133,
+      "lon": -77.215,
+      "source_note": "NIST HQ confirmed via nist.gov/about-nist/visit ('Gate A at W. Diamond Ave. and 100 Bureau Drive'). The Time & Frequency Division operates from Boulder CO, but Gaithersburg is the legal headquarters. NTP servers: time.nist.gov, time-a-g.nist.gov, time-b-g.nist.gov, time-a-b.nist.gov. Confidence: ±100 m.",
+      "source_urls": [
+        "https://www.nist.gov/about-nist/visit",
+        "https://tf.nist.gov/tf-cgi/servers.cgi"
+      ]
+    },
+    {
+      "id": 3,
+      "authority": "NIST USA",
+      "facility": "NIST Boulder Laboratories (Time & Frequency Division)",
+      "address": "325 Broadway, Boulder, CO 80305, USA",
+      "city": "Boulder, CO",
+      "lat": 39.991,
+      "lon": -105.262,
+      "source_note": "NIST main gate confirmed via nist.gov/about-nist/visit ('At the main gate, 325 Broadway'). This campus houses the Time & Frequency Division, atomic clocks driving UTC(NIST), and NIST Internet Time Service. Confidence: ±100 m.",
+      "source_urls": [
+        "https://www.nist.gov/about-nist/visit",
+        "https://www.nist.gov/pml/time-and-frequency-division"
+      ]
+    },
+    {
+      "id": 4,
+      "authority": "NIST USA",
+      "facility": "WWV Transmitter Station",
+      "address": "2000 East County Road 58, Fort Collins, CO 80524, USA",
+      "city": "Fort Collins, CO",
+      "lat": 40.680,
+      "lon": -105.043,
+      "source_note": "Address confirmed from WWV station ID announcement ('2000 East County Road 58, Fort Collins, Colorado, 80524'). Wikipedia GeoHack infobox: 40°40'47\"N 105°02'33\"W → 40.680°N, 105.043°W. Individual antenna coordinates vary by ±30 m across the 10 MHz (40.680, -105.041) and 2.5 MHz (40.682, -105.043) towers; centroid used. Confidence: ±50 m.",
+      "source_urls": [
+        "https://en.wikipedia.org/wiki/WWV_(radio_station)",
+        "https://www.nist.gov/pml/time-and-frequency-division/time-services/nist-radio-stations/wwv"
+      ]
+    },
+    {
+      "id": 5,
+      "authority": "NICT Japan (National Institute of Information and Communications Technology)",
+      "facility": "Koganei Headquarters Campus",
+      "address": "4-2-1 Nukui-Kitamachi, Koganei, Tokyo 184-8795, Japan",
+      "city": "Koganei, Tokyo",
+      "lat": 35.709,
+      "lon": 139.488,
+      "source_note": "Wikipedia GeoHack infobox: 35°42'33.3\"N 139°29'16\"E → 35.7093°N, 139.4878°E, rounded to 35.709, 139.488. NICT operates UTC(NICT), JJY time signal, and ntp.nict.jp stratum-1. Confidence: ±50 m.",
+      "source_urls": [
+        "https://en.wikipedia.org/wiki/National_Institute_of_Information_and_Communications_Technology",
+        "https://www.nict.go.jp/en/about/index.html",
+        "https://jjy.nict.go.jp/ntp/index-e.html"
+      ]
+    },
+    {
+      "id": 6,
+      "authority": "KRISS South Korea (Korea Research Institute of Standards and Science)",
+      "facility": "KRISS Campus, Yuseong District",
+      "address": "267 Gajeong-ro, Yuseong-gu, Daejeon 34113, South Korea",
+      "city": "Daejeon",
+      "lat": 36.373,
+      "lon": 127.381,
+      "source_note": "Wikipedia confirms location as 'Yuseong District, Daejeon'. Street address 267 Gajeong-ro (in the Daedeok Science Town area) from KRISS official site. Coordinates from OSM geocoding of that address. NTP: time.kriss.re.kr. Confidence: ±200 m.",
+      "source_urls": [
+        "https://en.wikipedia.org/wiki/Korea_Research_Institute_of_Standards_and_Science",
+        "https://www.kriss.re.kr/eng/sub03/sub03_01.do"
+      ]
+    },
+    {
+      "id": 7,
+      "authority": "NPL UK (National Physical Laboratory)",
+      "facility": "NPL Teddington",
+      "address": "Hampton Road, Teddington, TW11 0LW, England, UK",
+      "city": "Teddington, London",
+      "lat": 51.426,
+      "lon": -0.344,
+      "source_note": "Wikipedia GeoHack infobox: 51°25'35\"N 0°20'37\"W → 51.4264°N, 0.3436°W, rounded to 51.426, -0.344. Address from NPL Wikipedia infobox and Reference 15 ('Hampton Road, Teddington, Middlesex, United Kingdom, TW11 0LW'). NTP: ntp1.npl.co.uk, ntp2.npl.co.uk. Confidence: ±50 m.",
+      "source_urls": [
+        "https://en.wikipedia.org/wiki/National_Physical_Laboratory_(United_Kingdom)",
+        "https://www.npl.co.uk/time-frequency/ntp"
+      ]
+    },
+    {
+      "id": 8,
+      "authority": "Observatoire de Paris / LNE-SYRTE (SYRTE)",
+      "facility": "Observatoire de Paris, Main Campus",
+      "address": "61 avenue de l'Observatoire, 75014 Paris, France",
+      "city": "Paris (14th arr.)",
+      "lat": 48.836,
+      "lon": 2.335,
+      "source_note": "Historic Paris meridian passes through this site (2°20'14\"E). Standard coordinates for Observatoire de Paris: 48°50'11\"N, 2°20'11\"E → 48.836°N, 2.335°E. LNE-SYRTE (Système de Référence Temps-Espace) is the French primary time lab, operated jointly by CNRS/Paris Observatory/Sorbonne/LNE. NTP: ntp.obspm.fr. Confidence: ±50 m.",
+      "source_urls": [
+        "https://en.wikipedia.org/wiki/Paris_Observatory",
+        "https://syrte.obspm.fr/spip/spip.php?article23",
+        "https://www.obspm.fr/en/the-observatory/contacts-pratiques"
+      ]
+    },
+    {
+      "id": 9,
+      "authority": "PTB Germany (Physikalisch-Technische Bundesanstalt)",
+      "facility": "PTB Braunschweig Main Campus",
+      "address": "Bundesallee 100, 38116 Braunschweig, Germany",
+      "city": "Braunschweig",
+      "lat": 52.295,
+      "lon": 10.464,
+      "source_note": "Wikipedia GeoHack infobox: 52°17'43\"N 10°27'49\"E → 52.2953°N, 10.4636°E, rounded to 52.295, 10.464. Atomic clocks and UTC(PTB) are maintained here; DCF77 transmitter is ~25 km west at Mainflingen. NTP: ptbtime1.ptb.de, ptbtime2.ptb.de, ptbtime3.ptb.de. Confidence: ±50 m.",
+      "source_urls": [
+        "https://en.wikipedia.org/wiki/Physikalisch-Technische_Bundesanstalt",
+        "https://www.ptb.de/cms/en/ptb/standorte/standort-braunschweig.html",
+        "https://www.ptb.de/cms/en/ptb/fachabteilungen/abt4/fb-44/ag-442/dissemination-of-legal-time.html"
+      ]
+    },
+    {
+      "id": 10,
+      "authority": "INRiM Italy (Istituto Nazionale di Ricerca Metrologica)",
+      "facility": "INRiM Campus, Torino",
+      "address": "Strada delle Cacce 91, 10135 Torino, Italy",
+      "city": "Turin (Torino)",
+      "lat": 45.030,
+      "lon": 7.638,
+      "source_note": "Official INRiM address: Strada delle Cacce 91, 10135 Turin. Coordinates from OSM/Google Maps geocoding of that address. INRiM maintains UTC(IT). NTP: ntp1.inrim.it, ntp2.inrim.it. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.inrim.it/en/about/contacts-and-how-to-reach-us",
+        "https://www.inrim.it/en/labs/t/time-laboratory"
+      ]
+    },
+    {
+      "id": 11,
+      "authority": "NRC Canada (National Research Council)",
+      "facility": "NRC Ottawa Time & Frequency Group",
+      "address": "1200 Montreal Road, Ottawa, ON K1A 0R6, Canada",
+      "city": "Ottawa, ON",
+      "lat": 45.430,
+      "lon": -75.620,
+      "source_note": "NRC headquarters campus at Montreal Road. The Herzberg Astronomy & Astrophysics Research Centre (time section) is on this campus. UTC(NRC) is generated here; CHU radio station transmitter is near Ottawa. NTP: time.chu.nrc.ca, ntp1.nrc.ca. Confidence: ±200 m.",
+      "source_urls": [
+        "https://nrc.canada.ca/en/research-development/nrc-facilities/herzberg-astronomy-astrophysics-research-centre-facilities/time-frequency-laboratory",
+        "https://www.nrc-cnrc.gc.ca/eng/contact/facilities.html"
+      ]
+    },
+    {
+      "id": 12,
+      "authority": "NTSC China (National Time Service Center, Chinese Academy of Sciences)",
+      "facility": "NTSC Lintong Station (primary clock/transmitter site)",
+      "address": "Lintong District, Xi'an, Shaanxi Province, China (BPM station: Pucheng Road, Lintong)",
+      "city": "Lintong, Xi'an",
+      "lat": 34.376,
+      "lon": 109.215,
+      "source_note": "NTSC (formerly Shaanxi Astronomical Observatory) has two main sites: the Xi'an city headquarters (~34.233, 108.912) and the Lintong observation/time-signal station where atomic clocks and BPM shortwave transmitter live. Lintong station coordinates estimated from published NTSC maps and satellite imagery (~34.376, 109.215). NTP: ntp.ntsc.ac.cn (stratum-1 from Lintong). Wikipedia confirms headquarters in Xi'an, Shaanxi. Confidence: ±1 km (Lintong site).",
+      "source_urls": [
+        "https://en.wikipedia.org/wiki/National_Time_Service_Center",
+        "http://english.ntsc.cas.cn/au/",
+        "https://www.iers.org/IERS/EN/Organization/ProductsAndServices/TimeService/TimeService.html"
+      ]
+    },
+    {
+      "id": 13,
+      "authority": "CENAM Mexico (Centro Nacional de Metrología)",
+      "facility": "CENAM Campus, El Marqués",
+      "address": "km 4.5 Carretera a Los Cués, El Marqués, Querétaro 76246, Mexico",
+      "city": "El Marqués, Querétaro",
+      "lat": 20.662,
+      "lon": -100.348,
+      "source_note": "Official CENAM address published on cenam.mx. Coordinates from OSM geocoding of 'km 4.5 Carretera a Los Cués, El Marqués, Querétaro'; facility is east of downtown Querétaro in the Carretones area. CENAM maintains UTC(CNM). NTP: cronos.cenam.mx, ntp2.cenam.mx. Confidence: ±500 m.",
+      "source_urls": [
+        "https://www.cenam.mx/contacto/",
+        "https://www.cenam.mx/tiempo_y_frecuencia/"
+      ]
+    },
+    {
+      "id": 14,
+      "authority": "SHN Argentina (Servicio de Hidrografía Naval)",
+      "facility": "SHN Headquarters, Buenos Aires",
+      "address": "Avenida Montes de Oca 2124, C1270ABV Buenos Aires, Argentina",
+      "city": "Buenos Aires",
+      "lat": -34.639,
+      "lon": -58.369,
+      "source_note": "SHN (Argentine Naval Hydrographic Service) maintains Argentina's official time standard and operates time signal TBF/ NTP services. Address: Av. Montes de Oca 2124, Buenos Aires. Coordinates from OSM geocoding of that address in Barracas/South BA. SHNN and ntp.srv.hora.shoa.cl are Chilean; Argentina's SHN is ntp.hora.shoa-ar is often confused—Argentina's NTP is at hora.smn.gov.ar or ntp.shoa.gov.ar. Confidence: ±300 m.",
+      "source_urls": [
+        "https://www.hidro.gov.ar/oceanografia/tmareas/tmareas.asp",
+        "https://www.hidro.gov.ar/contacto/"
+      ]
+    },
+    {
+      "id": 15,
+      "authority": "NIC.br / NTP.br (Núcleo de Informação e Coordenação do Ponto BR)",
+      "facility": "NIC.br Headquarters, São Paulo",
+      "address": "Av. das Nações Unidas 11541, 7th floor, Brooklin Novo, São Paulo SP 04578-000, Brazil",
+      "city": "São Paulo",
+      "lat": -23.594,
+      "lon": -46.688,
+      "source_note": "NIC.br (CGI.br / CEWEB.br) published address: WTC Tower III, Brooklin Novo, São Paulo. NTP.br operates Brazil's stratum-1 NTP infrastructure. NTP pool: pool.ntp.br, a.st1.ntp.br, b.st1.ntp.br, c.st1.ntp.br, d.st1.ntp.br. Coordinates from OSM geocoding of WTC João Dória/Av. Nações Unidas 11541. Confidence: ±200 m.",
+      "source_urls": [
+        "https://ntp.br/ntp-contato.php",
+        "https://nic.br/press/releases/2020/nr-04-2020.htm"
+      ]
+    },
+    {
+      "id": 16,
+      "authority": "CSIR-NPL India (National Physical Laboratory, Council of Scientific & Industrial Research)",
+      "facility": "CSIR-NPL Campus, New Delhi",
+      "address": "Dr. K.S. Krishnan Marg, New Delhi 110012, India",
+      "city": "New Delhi",
+      "lat": 28.638,
+      "lon": 77.165,
+      "source_note": "CSIR-NPL official address: Dr. K.S. Krishnan Marg (formerly Hillside Road), New Delhi. The lab maintains UTC(NPLI) and operates NTP servers. Coordinates from OSM geocoding (~Pusa area). NTP: samay1.nic.in, samay2.nic.in (NIC-hosted stratum-1 traceable to CSIR-NPL). Confidence: ±300 m.",
+      "source_urls": [
+        "https://www.nplindia.org/contact-us/",
+        "https://www.nplindia.org/time-and-frequency/"
+      ]
+    },
+    {
+      "id": 17,
+      "authority": "BMKG Indonesia (Badan Meteorologi, Klimatologi, dan Geofisika)",
+      "facility": "BMKG Kemayoran Headquarters",
+      "address": "Jalan Angkasa I No. 2, Kemayoran, Jakarta Pusat 10720, Indonesia",
+      "city": "Jakarta (Kemayoran)",
+      "lat": -6.174,
+      "lon": 106.848,
+      "source_note": "BMKG official headquarters address per bmkg.go.id. BMKG operates Indonesia's official time-standard distribution (UTC+7 WIB). NTP: ntp.bmkg.go.id. Coordinates from OSM geocoding of Jl. Angkasa I No. 2, Kemayoran. Confidence: ±300 m.",
+      "source_urls": [
+        "https://www.bmkg.go.id/kontak/",
+        "https://www.bmkg.go.id/geofisika/waktu-dan-navigasi.bmkg"
+      ]
+    },
+    {
+      "id": 18,
+      "authority": "VNIIFTRI Russia (Всероссийский НИИ физико-технических и радиотехнических измерений)",
+      "facility": "VNIIFTRI Mendeleevo Campus (main UTC(SU) site)",
+      "address": "Mendeleevo, Solnechnogorsky District, Moscow Oblast 141570, Russia",
+      "city": "Mendeleevo, Moscow Oblast",
+      "lat": 56.033,
+      "lon": 37.218,
+      "source_note": "VNIIFTRI headquarters at Mendeleevo (~40 km north of Moscow). UTC(SU) primary cesium and hydrogen-maser clock ensemble is on this site. Coordinates from published Russian-language references and satellite imagery. NTP: ntp1.vniiftri.ru, ntp2.vniiftri.ru, ntp3.vniiftri.ru, ntp4.vniiftri.ru. Confidence: ±500 m.",
+      "source_urls": [
+        "https://www.vniiftri.ru/en/about/contacts.html",
+        "https://www.bipm.org/en/bipm-services/timescales/utc-contributors"
+      ]
+    },
+    {
+      "id": 19,
+      "authority": "VNIIFTRI Russia – Khabarovsk Branch (Khabarovsky Filial)",
+      "facility": "VNIIFTRI KhF Khabarovsk",
+      "address": "Khabarovsk, Khabarovsk Krai, Russia (exact street address not publicly confirmed)",
+      "city": "Khabarovsk",
+      "lat": 48.480,
+      "lon": 135.082,
+      "source_note": "VNIIFTRI operates a Far-Eastern branch in Khabarovsk responsible for UTC+10 zone time dissemination. Exact street address is not confirmed from open sources. Coordinates are an estimate for central-east Khabarovsk city (near known government/scientific district). Confidence: ±2 km (city-level estimate).",
+      "source_urls": [
+        "https://www.vniiftri.ru/en/about/branches.html"
+      ]
+    },
+    {
+      "id": 20,
+      "authority": "SASO / SSMQO Saudi Arabia (Saudi Standards, Metrology and Quality Organization)",
+      "facility": "SASO Headquarters / Metrology Laboratory, Riyadh",
+      "address": "King Abdulaziz Road (Olaya district), Riyadh 11514, Saudi Arabia",
+      "city": "Riyadh",
+      "lat": 24.694,
+      "lon": 46.756,
+      "source_note": "SASO (formerly Saudi Arabian Standards Organization) NTP infrastructure is operated from their Riyadh headquarters. Street address from saso.gov.sa contact forms. Coordinates are estimated for the Olaya/north-Riyadh government complex area. NTP: ntp.saso.gov.sa (candidate). Confidence: ±1 km.",
+      "source_urls": [
+        "https://www.saso.gov.sa/en/contactus/Pages/default.aspx",
+        "https://www.saso.gov.sa/en/about/Pages/default.aspx"
+      ]
+    },
+    {
+      "id": 21,
+      "authority": "NMISA South Africa (National Metrology Institute of South Africa)",
+      "facility": "NMISA at CSIR Campus, Pretoria",
+      "address": "Building 5, CSIR Campus, Meiring Naudé Road, Brummeria, Pretoria 0184, South Africa",
+      "city": "Pretoria (Brummeria)",
+      "lat": -25.762,
+      "lon": 28.267,
+      "source_note": "NMISA (formerly CSIR NMI) is housed at the CSIR campus, Meiring Naudé Road, Pretoria. Maintains UTC(ZA). Coordinates from OSM for CSIR main entrance, Brummeria. NTP: ntp1.nmisa.org, ntp2.nmisa.org. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.nmisa.org/contact",
+        "https://www.nmisa.org/about/time-and-frequency"
+      ]
+    },
+    {
+      "id": 22,
+      "authority": "TÜBİTAK UME Turkey (Ulusal Metroloji Enstitüsü)",
+      "facility": "TÜBİTAK UME Campus, Gebze",
+      "address": "P.K. 54, 41470 Gebze, Kocaeli, Turkey",
+      "city": "Gebze, Kocaeli",
+      "lat": 40.802,
+      "lon": 29.441,
+      "source_note": "TÜBİTAK UME (National Metrology Institute of Turkey) address P.K. 54, 41470 Gebze. Located in the Gebze Organized Industrial Zone. UTC(TUBITAK) maintained here. NTP: ntp1.tubitak.gov.tr, ntp2.tubitak.gov.tr. Coordinates from OSM geocoding of Gebze industrial zone. Confidence: ±500 m.",
+      "source_urls": [
+        "https://www.ume.tubitak.gov.tr/en/about-us/contact",
+        "https://www.ume.tubitak.gov.tr/en/metrology-areas/time-and-frequency"
+      ]
+    },
+    {
+      "id": 23,
+      "authority": "ROA Spain (Real Observatorio de la Armada)",
+      "facility": "Real Observatorio de la Armada",
+      "address": "Cecilio Pujazón s/n, 11100 San Fernando, Cádiz, Spain",
+      "city": "San Fernando, Cádiz",
+      "lat": 36.464,
+      "lon": -6.205,
+      "source_note": "ROA (Royal Observatory of the Navy) is Spain's time authority, maintaining UTC(ROA). Address: Cecilio Pujazón s/n, San Fernando. The observatory sits on the Isla de León. Coordinates from OSM. NTP: hora.roa.es. Confidence: ±200 m.",
+      "source_urls": [
+        "https://roa.armada.gob.es/roa/pages/servicioshora/servicioshora",
+        "https://roa.armada.gob.es/roa/pages/contacto/contacto"
+      ]
+    },
+    {
+      "id": 24,
+      "authority": "VSL Netherlands (Van Swinden Laboratorium / Dutch Metrology Institute)",
+      "facility": "VSL Laboratory, Delft",
+      "address": "Thijsseweg 11, 2629 JA Delft, Netherlands",
+      "city": "Delft",
+      "lat": 51.994,
+      "lon": 4.369,
+      "source_note": "VSL official address: Thijsseweg 11, 2629 JA Delft. UTC(VSL) maintained here. NTP servers hosted via SURF/NLnet or directly. Coordinates from OSM. NTP: ntp0.nl.net, ntp1.nl.net (VSL-affiliated). Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.vsl.nl/en/contact",
+        "https://www.vsl.nl/en/time-and-frequency"
+      ]
+    },
+    {
+      "id": 25,
+      "authority": "METAS Switzerland (Federal Institute of Metrology)",
+      "facility": "METAS Campus, Wabern",
+      "address": "Lindenweg 50, 3084 Wabern b. Bern, Switzerland",
+      "city": "Wabern (Bern)",
+      "lat": 46.921,
+      "lon": 7.459,
+      "source_note": "METAS (Eidgenössisches Institut für Metrologie) official address: Lindenweg 50, 3084 Wabern. Maintains UTC(CH). NTP: ntp.metas.ch (stratum-1). Coordinates from OSM geocoding of Lindenweg 50. Confidence: ±100 m.",
+      "source_urls": [
+        "https://www.metas.ch/en/home/fachbereiche/zeit-und-frequenz.html",
+        "https://www.metas.ch/en/home/kontakt.html"
+      ]
+    },
+    {
+      "id": 26,
+      "authority": "Netnod Sweden",
+      "facility": "Netnod Headquarters / Primary NTP Infrastructure, Stockholm",
+      "address": "Franzéngatan 5, 112 51 Stockholm, Sweden",
+      "city": "Stockholm",
+      "lat": 59.334,
+      "lon": 18.019,
+      "source_note": "Netnod registered office: Franzéngatan 5, Kungsholmen, Stockholm. Netnod's NTP infrastructure (ntp.netnod.se, nts.netnod.se) is distributed across multiple Stockholm data centres (Interxion, Equinix). This coordinate reflects the Franzéngatan registered office; actual server hardware sits at co-lo facilities in the Kista/Nacka corridor (~59.403, 17.937). Confidence (registered office): ±200 m.",
+      "source_urls": [
+        "https://www.netnod.se/ntp",
+        "https://www.netnod.se/about-netnod/contact"
+      ]
+    },
+    {
+      "id": 27,
+      "authority": "Justervesenet Norway (Norwegian Metrology Service)",
+      "facility": "Justervesenet Campus, Kjeller",
+      "address": "Fetveien 99, 2007 Kjeller, Akershus, Norway",
+      "city": "Kjeller, Akershus",
+      "lat": 59.977,
+      "lon": 11.080,
+      "source_note": "Justervesenet official address: Fetveien 99, 2007 Kjeller. Maintains UTC(JV). NTP: ntp1.justervesenet.no, ntp2.justervesenet.no. Coordinates from OSM geocoding. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.justervesenet.no/en/time-and-calibration/time-synchronisation/",
+        "https://www.justervesenet.no/kontakt-oss/"
+      ]
+    },
+    {
+      "id": 28,
+      "authority": "GUM Poland (Główny Urząd Miar / Central Office of Measures)",
+      "facility": "GUM Warsaw Headquarters",
+      "address": "ul. Elektoralna 2, 00-139 Warsaw, Poland",
+      "city": "Warsaw",
+      "lat": 52.239,
+      "lon": 21.013,
+      "source_note": "GUM official address: ul. Elektoralna 2, Warsaw (old-town adjacent, near Mirów). UTC(PL) is maintained at GUM. NTP: tempus1.gum.gov.pl, tempus2.gum.gov.pl. Coordinates from OSM geocoding of ul. Elektoralna 2. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.gum.gov.pl/pl/kontakt",
+        "https://www.gum.gov.pl/pl/laboratorium-czasu-i-czestotliwosci"
+      ]
+    },
+    {
+      "id": 29,
+      "authority": "ROB Belgium (Observatoire Royal de Belgique / Koninklijke Sterrenwacht van België)",
+      "facility": "Royal Observatory of Belgium, Uccle Campus",
+      "address": "Avenue Circulaire 3, B-1180 Uccle, Brussels, Belgium",
+      "city": "Uccle, Brussels",
+      "lat": 50.799,
+      "lon": 4.358,
+      "source_note": "ROB official address: Avenue Circulaire 3, 1180 Uccle. The Time Department maintains UTC(ORB). NTP: ntp1.oma.be, ntp2.oma.be (OMA = Observatoire Royal / Koninklijke Sterrenwacht). Coordinates from OSM; latitude 50.799, longitude 4.358. Confidence: ±100 m.",
+      "source_urls": [
+        "https://www.astro.oma.be/en/scientific-research/time-and-earth-rotation/",
+        "https://www.astro.oma.be/en/infos/contact/"
+      ]
+    },
+    {
+      "id": 30,
+      "authority": "BEV Austria (Bundesamt für Eich- und Vermessungswesen)",
+      "facility": "BEV Vienna Headquarters",
+      "address": "Arltgasse 35, 1160 Vienna, Austria",
+      "city": "Vienna",
+      "lat": 48.224,
+      "lon": 16.316,
+      "source_note": "BEV official address: Arltgasse 35, 1160 Wien (Ottakring district). Maintains UTC(BEV). NTP: ntp1.bev.gv.at, ntp2.bev.gv.at. Coordinates from OSM geocoding. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.bev.gv.at/portal/page?_pageid=713,1550831&_dad=portal&_schema=PORTAL",
+        "https://www.bev.gv.at/portal/page?_pageid=713,2709100&_dad=portal&_schema=PORTAL"
+      ]
+    },
+    {
+      "id": 31,
+      "authority": "DFM Denmark (DFM A/S – Danish Fundamental Metrology)",
+      "facility": "DFM at DTU Campus, Kongens Lyngby",
+      "address": "Matematiktorvet 307-308, 2800 Kongens Lyngby (DTU), Denmark",
+      "city": "Kongens Lyngby (Copenhagen metro)",
+      "lat": 55.786,
+      "lon": 12.523,
+      "source_note": "NOTE: DFM A/S is located on the DTU (Technical University of Denmark) campus in Kongens Lyngby, NOT in Taastrup as sometimes cited in older pool-server references. Previous DELTA/Force Technology labs were in Taastrup (~55.655, 12.302) but DFM's address since its current form is 55.786, 12.523 (DTU). NTP: ntp.dfm.dk. Confidence (DTU campus): ±200 m.",
+      "source_urls": [
+        "https://www.dfm.dk/about-dfm/contact/",
+        "https://www.dtu.dk/en/about/campuses/dtu-lyngby-campus"
+      ]
+    },
+    {
+      "id": 32,
+      "authority": "VTT MIKES Finland (VTT Technical Research Centre, MIKES Metrology)",
+      "facility": "VTT Otaniemi Campus, Espoo",
+      "address": "Tekniikantie 1, 02150 Espoo (Otaniemi), Finland",
+      "city": "Espoo (Helsinki metro)",
+      "lat": 60.185,
+      "lon": 24.828,
+      "source_note": "MIKES (Centre for Metrology and Accreditation) merged into VTT in 2015. The MIKES time & frequency laboratory is on VTT's Otaniemi campus. UTC(FI) generated here. NTP: ntp1.mikes.fi, ntp2.mikes.fi. Coordinates from OSM for Tekniikantie 1, Otaniemi. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.vttresearch.com/en/ourservices/time-and-frequency-metrology",
+        "https://www.vttresearch.com/en/about-vtt/contact-us"
+      ]
+    },
+    {
+      "id": 33,
+      "authority": "University of Galway (formerly NUI Galway)",
+      "facility": "University of Galway IT/Network Services",
+      "address": "University Road, Galway H91 TK33, Ireland",
+      "city": "Galway",
+      "lat": 53.281,
+      "lon": -9.060,
+      "source_note": "NTP server ntp.nuigalway.ie (old hostname retained since the 2022 renaming to University of Galway) is operated by IT Services on the main campus. Campus entrance on University Road. Coordinates from OSM. Confidence: ±200 m (IT building location unspecified).",
+      "source_urls": [
+        "https://www.universityofgalway.ie/about-us/about-galway/contact-us/",
+        "https://www.universityofgalway.ie/information-solutions-services/services-for-staff/network-servers/ntp/"
+      ]
+    },
+    {
+      "id": 34,
+      "authority": "IST Portugal (Instituto Superior Técnico, Universidade de Lisboa)",
+      "facility": "IST Alameda Campus",
+      "address": "Avenida Rovisco Pais 1, 1049-001 Lisboa, Portugal",
+      "city": "Lisbon",
+      "lat": 38.736,
+      "lon": -9.139,
+      "source_note": "IST (Técnico Lisboa) Alameda campus. NTP server ntp.ist.utl.pt (legacy hostname, still resolves) operated by IST's RNIT / IT network services. Central campus at Av. Rovisco Pais. Coordinates from OSM. Confidence: ±200 m.",
+      "source_urls": [
+        "https://tecnico.ulisboa.pt/pt/sobre-o-tecnico/contactos/",
+        "https://rnit.ist.utl.pt/"
+      ]
+    },
+    {
+      "id": 35,
+      "authority": "SHOA Chile (Servicio Hidrográfico y Oceanográfico de la Armada)",
+      "facility": "SHOA Headquarters, Valparaíso",
+      "address": "Errázuriz 232, Playa Ancha, Valparaíso 2340000, Chile",
+      "city": "Valparaíso",
+      "lat": -33.034,
+      "lon": -71.647,
+      "source_note": "SHOA (Chilean Naval Hydrographic and Oceanographic Service) maintains Chile's official UTC(SHM) time and operates ntp.shoa.cl. Address: Errázuriz 232, Playa Ancha, Valparaíso. Coordinates from OSM geocoding. Confidence: ±300 m.",
+      "source_urls": [
+        "https://www.shoa.cl/php/ntp.php",
+        "https://www.shoa.cl/php/contacto.php"
+      ]
+    },
+    {
+      "id": 36,
+      "authority": "ISOC-IL / IIX Israel (Israel Internet Association / Israel Internet Exchange)",
+      "facility": "IIX / ISOC-IL NTP infrastructure, Tel Aviv area",
+      "address": "Tel Aviv metropolitan area, Israel (ISOC-IL: 6 Weizmann St, Tel Aviv; IIX nodes at commercial data centres)",
+      "city": "Tel Aviv",
+      "lat": 32.072,
+      "lon": 34.788,
+      "source_note": "IIX (Israel Internet Exchange) NTP nodes and ISOC-IL (Internet Society – Israel Chapter) infrastructure are co-located at major Tel Aviv data centres (e.g. Equinix TA1, BIX-IL). ISOC-IL registered office: 6 Weizmann Street, Tel Aviv (~32.087, 34.792). Coordinates rounded to central Tel Aviv as city-level estimate. NTP: ntp.isoc.org.il (candidate). Confidence: ±2 km (exact data-centre location unconfirmed from open sources).",
+      "source_urls": [
+        "https://www.isoc.org.il/",
+        "https://www.iix.net.il/"
+      ]
+    },
+    {
+      "id": 37,
+      "authority": "NMC Singapore (A*STAR National Metrology Centre)",
+      "facility": "A*STAR NMC, Science Park",
+      "address": "1 Science Park Drive, Singapore 118221",
+      "city": "Singapore",
+      "lat": 1.299,
+      "lon": 103.787,
+      "source_note": "A*STAR NMC (National Metrology Centre) was at 1 Science Park Drive, Singapore Science Park I. NMC maintains Singapore's time standard traceable to BIPM. In more recent years NMC may operate from 73 Science Park Drive or a shared A*STAR campus. NTP: ntpsg.nmc.a-star.edu.sg or time.nmc.a-star.edu.sg (candidate). Confidence: ±500 m.",
+      "source_urls": [
+        "https://www.a-star.edu.sg/nmc",
+        "https://www.nmc.a-star.edu.sg/about-us/contact-us"
+      ]
+    },
+    {
+      "id": 38,
+      "authority": "NMI Australia (National Measurement Institute) – Sydney HQ",
+      "facility": "NMI North Ryde Campus (primary UTC(AUS) site)",
+      "address": "105 Delhi Road, North Ryde NSW 2113, Australia",
+      "city": "North Ryde (Sydney), NSW",
+      "lat": -33.797,
+      "lon": 151.124,
+      "source_note": "NMI (now part of the Dept. of Industry, Science and Resources) primary campus at 105 Delhi Road, North Ryde. UTC(AUS) atomic clock ensemble maintained here. NTP: ntp.nmi.gov.au, ntp.sydney.nmi.gov.au, ntp.sydney2.nmi.gov.au. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.industry.gov.au/national-measurement-institute",
+        "https://www.industry.gov.au/national-measurement-institute/nmi-services/physical-measurement-services/time-and-frequency-services"
+      ]
+    },
+    {
+      "id": 39,
+      "authority": "NMI Australia – Melbourne Facility",
+      "facility": "NMI Melbourne Regional Office / Time Node",
+      "address": "Melbourne, VIC (exact NMI building not publicly documented)",
+      "city": "Melbourne, VIC",
+      "lat": -37.815,
+      "lon": 144.970,
+      "source_note": "NMI operates ntp.melbourne.nmi.gov.au stratum-1 server. Exact building address for the Melbourne node is not disclosed. Coordinates are an estimate for the Docklands/southern CBD area where Australian government agencies cluster. Confidence: ±5 km.",
+      "source_urls": [
+        "https://www.industry.gov.au/national-measurement-institute/nmi-services/physical-measurement-services/time-and-frequency-services"
+      ]
+    },
+    {
+      "id": 40,
+      "authority": "NMI Australia – Perth Facility",
+      "facility": "NMI Perth Regional Office / Time Node",
+      "address": "Perth, WA (exact NMI building not publicly documented)",
+      "city": "Perth, WA",
+      "lat": -31.952,
+      "lon": 115.862,
+      "source_note": "NMI operates ntp.perth.nmi.gov.au stratum-1 server. Exact Perth building address not disclosed. Coordinates are an estimate for the East Perth/Technology Park government precinct. Confidence: ±5 km.",
+      "source_urls": [
+        "https://www.industry.gov.au/national-measurement-institute/nmi-services/physical-measurement-services/time-and-frequency-services"
+      ]
+    },
+    {
+      "id": 41,
+      "authority": "NMI Australia – Adelaide Facility",
+      "facility": "NMI Adelaide Regional Office / Time Node",
+      "address": "Adelaide, SA (exact NMI building not publicly documented)",
+      "city": "Adelaide, SA",
+      "lat": -34.926,
+      "lon": 138.600,
+      "source_note": "NMI operates ntp.adelaide.nmi.gov.au stratum-1 server. Exact Adelaide building address not disclosed. Coordinates are an estimate for inner Adelaide (Thebarton/CBD government area). Confidence: ±5 km.",
+      "source_urls": [
+        "https://www.industry.gov.au/national-measurement-institute/nmi-services/physical-measurement-services/time-and-frequency-services"
+      ]
+    },
+    {
+      "id": 42,
+      "authority": "NMI Australia – Brisbane Facility",
+      "facility": "NMI Brisbane Regional Office / Time Node",
+      "address": "Brisbane, QLD (exact NMI building not publicly documented)",
+      "city": "Brisbane, QLD",
+      "lat": -27.457,
+      "lon": 153.026,
+      "source_note": "NMI operates ntp.brisbane.nmi.gov.au stratum-1 server. Exact Brisbane building address not disclosed. Coordinates are an estimate for inner Brisbane (Brisbane CBD / South Bank government precinct). Confidence: ±5 km.",
+      "source_urls": [
+        "https://www.industry.gov.au/national-measurement-institute/nmi-services/physical-measurement-services/time-and-frequency-services"
+      ]
+    },
+    {
+      "id": 43,
+      "authority": "University of Melbourne",
+      "facility": "University of Melbourne, Parkville Campus",
+      "address": "Grattan Street, Parkville VIC 3010, Australia",
+      "city": "Parkville (Melbourne), VIC",
+      "lat": -37.798,
+      "lon": 144.961,
+      "source_note": "NTP server ntp.unimelb.edu.au operated by University of Melbourne IT Services, Parkville campus. Coordinates for main campus entrance. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.unimelb.edu.au/contact",
+        "https://its.unimelb.edu.au/"
+      ]
+    },
+    {
+      "id": 44,
+      "authority": "Australian National University (ANU)",
+      "facility": "ANU Acton Campus",
+      "address": "Sullivans Creek Road, Acton ACT 2601, Australia",
+      "city": "Acton (Canberra), ACT",
+      "lat": -35.278,
+      "lon": 149.119,
+      "source_note": "NTP server ntp.anu.edu.au operated by ANU IT Services, Acton campus. Coordinates for main campus centroid. Confidence: ±300 m.",
+      "source_urls": [
+        "https://www.anu.edu.au/about/contact-anu",
+        "https://services.anu.edu.au/information-technology/wifi-computing/time-servers"
+      ]
+    },
+    {
+      "id": 45,
+      "authority": "University of Adelaide",
+      "facility": "University of Adelaide, North Terrace Campus",
+      "address": "North Terrace, Adelaide SA 5005, Australia",
+      "city": "Adelaide, SA",
+      "lat": -34.921,
+      "lon": 138.604,
+      "source_note": "NTP server ntp.adelaide.edu.au operated by University of Adelaide IT. Main campus on North Terrace. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.adelaide.edu.au/contact/",
+        "https://www.adelaide.edu.au/technology/your-services/internet/ntp"
+      ]
+    },
+    {
+      "id": 46,
+      "authority": "University of Tasmania (UTAS)",
+      "facility": "UTas Sandy Bay Campus, Hobart",
+      "address": "Churchill Avenue, Sandy Bay TAS 7005, Australia",
+      "city": "Sandy Bay (Hobart), TAS",
+      "lat": -42.899,
+      "lon": 147.328,
+      "source_note": "NTP server ntp.utas.edu.au operated by UTas IT, Sandy Bay campus. Coordinates for campus main entrance. Confidence: ±300 m.",
+      "source_urls": [
+        "https://www.utas.edu.au/about/campus-locations/hobart",
+        "https://www.utas.edu.au/technology-services/"
+      ]
+    },
+    {
+      "id": 47,
+      "authority": "Monash University",
+      "facility": "Monash University, Clayton Campus",
+      "address": "Wellington Road, Clayton VIC 3800, Australia",
+      "city": "Clayton (Melbourne), VIC",
+      "lat": -37.914,
+      "lon": 145.134,
+      "source_note": "NTP server ntp.monash.edu.au operated by Monash IT, Clayton campus. Coordinates for main campus entrance. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.monash.edu/about/campuses/clayton",
+        "https://www.monash.edu/esolutions/contact"
+      ]
+    },
+    {
+      "id": 48,
+      "authority": "Curtin University",
+      "facility": "Curtin University, Bentley Campus",
+      "address": "Kent Street, Bentley WA 6102, Australia",
+      "city": "Bentley (Perth), WA",
+      "lat": -32.006,
+      "lon": 115.894,
+      "source_note": "NTP server ntp.curtin.edu.au operated by Curtin ISTS, Bentley campus. Coordinates for main campus. Confidence: ±200 m.",
+      "source_urls": [
+        "https://www.curtin.edu.au/contact/perth-campuses/",
+        "https://www.curtin.edu.au/it/"
+      ]
+    }
+  ]
+}

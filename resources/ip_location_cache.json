@@ -1,0 +1,37 @@
+{
+  "103.70.25.21": {
+    "lon": 174.77600000000001,
+    "location_note": "Wellington, New Zealand (GeoIP)",
+    "cached_at": "2026-03-28",
+    "lat": -41.286499999999997,
+    "source": "geoip"
+  },
+  "202.46.185.18": {
+    "lon": 174.779,
+    "location_note": "Wellington, New Zealand (GeoIP)",
+    "cached_at": "2026-03-28",
+    "lat": -41.292400000000001,
+    "source": "geoip"
+  },
+  "161.65.172.9": {
+    "lon": 174.917,
+    "location_note": "Lower Hutt, New Zealand (GeoIP)",
+    "cached_at": "2026-03-28",
+    "lat": -41.2348,
+    "source": "geoip"
+  },
+  "103.70.27.21": {
+    "lon": 174.76400000000001,
+    "location_note": "Auckland, New Zealand (GeoIP)",
+    "cached_at": "2026-03-28",
+    "lat": -36.850900000000003,
+    "source": "geoip"
+  },
+  "202.46.177.18": {
+    "lon": 174.76400000000001,
+    "location_note": "Auckland, New Zealand (GeoIP)",
+    "cached_at": "2026-03-28",
+    "lat": -36.850900000000003,
+    "source": "geoip"
+  }
+}

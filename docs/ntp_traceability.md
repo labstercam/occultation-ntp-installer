@@ -394,11 +394,23 @@ This captures how reproducibly NTP measures the offset around this time — incl
 
 #### Step 5 — Combined uncertainty
 
-The three components are assumed independent and combined in quadrature:
+The three components are assumed independent. Applying k=2 (Gaussian) to the full combined standard uncertainty overcounts the asymmetry contribution by ~15% relative to its hard physical ceiling (RTT/2): when asymmetry dominates, the rectangular distribution produces a "95%" interval that exceeds a quantity that already contains 100% of the probability mass. Instead, the asymmetry term and the statistical terms are expanded independently with coverage factors matched to their respective distributions and then combined in quadrature.
 
 $$u_{\text{combined}} = \sqrt{u_{\text{drift}}^2 + u_{\text{asymmetry}}^2 + u_{\text{scatter}}^2}$$
 
-$$U_{\text{expanded}} = 2\, u_{\text{combined}} \quad (k=2,\ \approx\!95\%\ \text{confidence})$$
+where $u_{\text{asymmetry}} = \bar{d}/2/\sqrt{3}$ is the rectangular standard uncertainty (retained for the k=1 display).
+
+Define the **hard physical bound** on one-way asymmetry and the **Gaussian statistical** component:
+
+$$b_{\text{asym}} = \frac{\bar{d}}{2}$$
+
+$$u_{\text{stat}} = \sqrt{u_{\text{drift}}^2 + u_{\text{scatter}}^2}$$
+
+The expanded uncertainty uses the correct 95% factor for each distribution — 0.95 for rectangular (95% of a uniform U[−b, b] lies within ±0.95b), k=2 for the near-Gaussian statistical terms:
+
+$$U_{\text{expanded}} = \sqrt{(0.95\, b_{\text{asym}})^2 + (2\, u_{\text{stat}})^2} \quad (\approx\!95\%\ \text{confidence})$$
+
+This guarantees $U_{\text{expanded}} \leq b_{\text{asym}} = \bar{d}/2$: the reported interval never exceeds the hard physical ceiling. $u_{\text{combined}}$ (k=1) is retained for display but is not used directly in the expanded coverage calculation.
 
 #### Corrected time
 
@@ -415,7 +427,7 @@ For a typical internet NTP setup with ~50 ms RTT (interpolating between records 
 | $u_{\text{drift}}$ (max jitter at surrounding records) | ±0.1–0.5 ms |
 | $u_{\text{asymmetry}}$ (RTT = 50 ms) | ±14.4 ms |
 | $u_{\text{scatter}}$ (stable NTP) | ±0.1–1 ms |
-| **U_expanded (k=2)** | **±29 ms** |
+| **U_expanded (~95%)** | **±24 ms** |
 
 For a local stratum-1 server (~1 ms RTT):
 
@@ -424,7 +436,7 @@ For a local stratum-1 server (~1 ms RTT):
 | $u_{\text{drift}}$ (max jitter at surrounding records) | ±5–50 µs |
 | $u_{\text{asymmetry}}$ (RTT = 1 ms) | ±0.29 ms |
 | $u_{\text{scatter}}$ | ±0.05–0.2 ms |
-| **U_expanded (k=2)** | **±0.6 ms** |
+| **U_expanded (~95%)** | **±0.5 ms** |
 
 For extrapolation (T is after the last loopstats record, gap = 60 s, freq = 5 ppm):
 
@@ -433,7 +445,7 @@ For extrapolation (T is after the last loopstats record, gap = 60 s, freq = 5 pp
 | $u_{\text{drift}}$ (freq × gap / √3, floored at jitter) | ±0.17 ms |
 | $u_{\text{asymmetry}}$ (RTT = 50 ms) | ±14.4 ms |
 | $u_{\text{scatter}}$ | ±0.1–1 ms |
-| **U_expanded (k=2)** | **±29 ms** |
+| **U_expanded (~95%)** | **±24 ms** |
 
 The network asymmetry term dominates in all cases. To improve accuracy, reduce RTT (use a nearby server) or use a GPS-disciplined local stratum-1 source.
 
@@ -443,7 +455,7 @@ The network asymmetry term dominates in all cases. To improve accuracy, reduce R
 |---|---|
 | Linear interpolation model | Assumes offset changes linearly between log records. Real NTP corrections can be non-linear if a step occurred between records; the jitter floor partially accounts for this. |
 | Extrapolation at end of data | When T is past the last loopstats record, the best estimate is the last known offset and uncertainty grows with the gap via the `freq` term. |
-| Unknown asymmetry distribution | The rectangular distribution assumption is conservative. If the path is known to be symmetric (e.g. local LAN), $u_{\text{asymmetry}}$ could be reduced. |
+| Unknown asymmetry distribution | The one-way path split is modelled as rectangular U[−RTT/2, RTT/2]. The 95% coverage factor for a rectangular distribution is 0.95 (not k=2), and this is what the expansion uses. If the path is known to be symmetric (e.g. local LAN), $b_{\text{asym}}$ could be reduced accordingly. |
 | NTP polling gaps | If NTP poll intervals are long (64–1024 s), the window between records is wider and interpolation is less precise. Watch `gap_before_s` and `gap_after_s` in the report. |
 | Server chain uncertainty | The uncertainty of the reference server itself (typically ±3 µs for a tier-1 server) is not included. It is negligible against network uncertainty in almost all practical cases. |
 | Log granularity | loopstats is written once per NTP discipline cycle (typically 64–1024 s). Events between log entries are estimated by interpolation, not direct measurement. |
