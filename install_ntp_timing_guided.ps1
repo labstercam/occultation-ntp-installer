@@ -1891,7 +1891,7 @@ function Get-ComPortSnapshot {
             $ports = @(Get-PnpDevice -Class Ports -PresentOnly -ErrorAction Stop)
         }
         catch {
-            Write-WarnMsg ("Get-PnpDevice failed; falling back to Win32_SerialPort. {0}" -f $_.Exception.Message)
+            # Get-PnpDevice not available on this system; Win32_SerialPort fallback will be used silently
             $ports = @()
         }
     }
@@ -3035,6 +3035,18 @@ try {
         $restartRecommended = $true
 
         Show-CountryInstallSummary -Country $selectedCountry -OtherCode $selectedOtherCode -CountryConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath
+    }
+
+    # If Step 4 was skipped but GPS was configured and ntp.conf already exists (e.g. Meinberg was
+    # installed in a prior session), apply the deferred GPS lines now rather than silently losing them.
+    if ($gpsConfigured -and -not $gpsApplied -and (Test-Path -LiteralPath $ntpConfPath)) {
+        Write-Info "Step 4 was skipped but ntp.conf is present. Applying GPS configuration now."
+        Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
+        $gpsApplied = $true
+        $restartRecommended = $true
+    }
+    elseif ($gpsConfigured -and -not $gpsApplied) {
+        Write-WarnMsg "GPS was configured but ntp.conf does not exist yet. Run Step 4 to create ntp.conf and apply the GPS settings."
     }
 
     if (Confirm-Step -Title "Step 5: Prioritise NTP traffic on this PC" -Details @(
