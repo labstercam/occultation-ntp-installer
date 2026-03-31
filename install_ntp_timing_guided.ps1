@@ -77,7 +77,7 @@ function Read-YesNo {
     while ($true) {
         $suffix = if ($DefaultYes) { "[Y/n]" } else { "[y/N]" }
         Write-Host ""
-        Write-Host "$Prompt $suffix" -ForegroundColor Magenta
+        Write-Host "$Prompt  $suffix" -ForegroundColor Magenta -NoNewline
         $reply = Read-Host
         if ([string]::IsNullOrWhiteSpace($reply)) {
             return $DefaultYes
@@ -96,7 +96,7 @@ function Read-StepAction {
 
     while ($true) {
         Write-Host ""
-        Write-Host "Action for '$Title':  [I]nstall  [S]kip  E[x]it  (Enter = Install)" -ForegroundColor Magenta
+        Write-Host "Action for '$Title':  [I]nstall  [S]kip  E[x]it  (Enter = Install)" -ForegroundColor Magenta -NoNewline
         $choice = Read-Host
         if ([string]::IsNullOrWhiteSpace($choice)) {
             return "Install"
