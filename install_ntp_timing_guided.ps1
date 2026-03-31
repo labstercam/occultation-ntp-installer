@@ -2393,11 +2393,11 @@ function Update-GpsLines {
     }
 
     if ($NmeaOnly) {
-        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 6 maxpoll 7 iburst"
+        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode iburst"
         $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 0 flag2 0 refid NMEA"
     }
     else {
-        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 6 maxpoll 7 prefer"
+        $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 4 maxpoll 4 prefer"
         $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 1 flag2 1 refid PPS"
     }
 
