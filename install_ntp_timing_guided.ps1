@@ -2398,7 +2398,7 @@ function Update-GpsLines {
     }
     else {
         $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 6 maxpoll 7 prefer"
-        $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 1 flag2 1 refid GPS"
+        $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 1 flag2 1 refid PPS"
     }
 
     $newEntry = [PSCustomObject]@{
