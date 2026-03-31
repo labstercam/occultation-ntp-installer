@@ -2895,6 +2895,7 @@ try {
         }
 
         Set-LoggingConfig -NtpConfPath $ntpConfPath -StatsDir $statsDir
+        New-RestartNtpDesktopShortcut -InstallRoot $installRoot
         $restartRecommended = $true
     }
 
@@ -3081,8 +3082,6 @@ try {
     if ($restartRecommended -and -not $restartCompleted) {
         $restartCompleted = Prompt-RestartIfNeeded -RestartNeeded $restartRecommended
     }
-
-    New-RestartNtpDesktopShortcut -InstallRoot $installRoot
 
     Write-Step "Completed"
     Write-Ok "Guided installer finished."
