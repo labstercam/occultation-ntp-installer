@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 Set-StrictMode -Version Latest
@@ -3049,7 +3049,7 @@ try {
             "WiFi adapters can use a power-saving mode that lets the radio briefly sleep between packets.",
             "This can cause NTP time-sync packets to arrive late or unevenly, adding timing jitter of 10-50 ms.",
             "This step tells Windows to keep your WiFi radio fully awake at all times.",
-            "Safe to apply on any PC — your internet connection and WiFi speed are not affected.",
+            "Safe to apply on any PC - your internet connection and WiFi speed are not affected.",
             "You can skip this step if your PC uses a wired Ethernet connection instead of WiFi."
         )) {
         Invoke-WifiPowerSavingStep | Out-Null
