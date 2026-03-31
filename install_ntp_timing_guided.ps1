@@ -1652,6 +1652,7 @@ function Update-NtpManagedSectionsFromTemplate {
         [int]$Port,
         [int]$Mode,
         [string]$StatsFolder,
+        [string]$DriftFile,
         [string]$OutputPath
     )
 
@@ -1681,11 +1682,12 @@ function Update-NtpManagedSectionsFromTemplate {
     }
 
     $template = Get-Content -Raw -LiteralPath $TemplatePath
-    $serverLines = ($Servers | ForEach-Object { "server $_" }) -join [Environment]::NewLine
+    $serverLines = ($Servers | ForEach-Object { "server $_ minpoll 6 maxpoll 7" }) -join [Environment]::NewLine
     $rendered = $template.Replace("{{SERVER_LINES}}", $serverLines)
     $rendered = $rendered.Replace("{{COM_PORT}}", [string]$Port)
     $rendered = $rendered.Replace("{{MODE}}", [string]$Mode)
     $rendered = $rendered.Replace("{{STATSDIR}}", $StatsFolder)
+    $rendered = $rendered.Replace("{{DRIFTFILE}}", $DriftFile)
 
     $serverStart = "# >>> NTP_GUIDED_MANAGED_SERVERS_START"
     $serverEnd = "# <<< NTP_GUIDED_MANAGED_SERVERS_END"
@@ -2563,6 +2565,7 @@ $ftdiDriverRemoteUrl = "https://raw.githubusercontent.com/labstercam/occultation
 $installRoot = Resolve-DefaultInstallRoot
 $statsDir = Join-Path $installRoot "etc\"
 $ntpConfPath = Join-Path $installRoot "etc\ntp.conf"
+$driftFilePath = Join-Path $installRoot "etc\ntp.drift"
 $ppsRegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\NTP"
 $ppsDllPath = Join-Path $installRoot "bin\loopback-ppsapi-provider.dll"
 $downloadDir = Resolve-WorkingTempDirectory -SubFolder "occultation-ntp-installer"
@@ -2900,7 +2903,7 @@ try {
         $selectedOtherCode = [string]$countryChoice.OtherCode
 
         $servers = Resolve-ServersForCountry -CountryCode $selectedCountry -ConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath -PoolZonesPath $poolZonesPath -OtherCc $selectedOtherCode
-        Update-NtpManagedSectionsFromTemplate -TemplatePath $templatePath -Servers $servers -Port $selectedComPort -Mode $selectedGpsMode -StatsFolder $statsDir -OutputPath $ntpConfPath
+        Update-NtpManagedSectionsFromTemplate -TemplatePath $templatePath -Servers $servers -Port $selectedComPort -Mode $selectedGpsMode -StatsFolder $statsDir -DriftFile $driftFilePath -OutputPath $ntpConfPath
 
         if ($gpsConfigured -and -not $gpsApplied) {
             Write-Info "Applying deferred GPS configuration to ntp.conf."

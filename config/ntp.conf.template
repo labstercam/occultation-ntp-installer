@@ -4,6 +4,18 @@
 # - Blocks between NTP_GUIDED_MANAGED_* markers are updated by setup scripts.
 # - Other lines in ntp.conf are preserved when applying updates.
 
+# Persist clock frequency calibration across restarts
+driftfile "{{DRIFTFILE}}"
+
+# Access control: block all inbound queries and modifications from remote hosts.
+# KoD (Kiss-o'-Death) packet is sent to rate-limit abusive clients.
+restrict default kod nomodify notrap nopeer noquery
+restrict -6 default kod nomodify notrap nopeer noquery
+
+# Allow ntpq / ntpdc to query the local daemon
+restrict 127.0.0.1
+restrict -6 ::1
+
 # >>> NTP_GUIDED_MANAGED_SERVERS_START
 # Internet NTP servers (country-specific)
 {{SERVER_LINES}}
