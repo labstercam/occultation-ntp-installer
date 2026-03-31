@@ -76,7 +76,9 @@ function Read-YesNo {
 
     while ($true) {
         $suffix = if ($DefaultYes) { "[Y/n]" } else { "[y/N]" }
-        $reply = Read-Host "$Prompt $suffix"
+        Write-Host ""
+        Write-Host "$Prompt $suffix" -ForegroundColor Magenta
+        $reply = Read-Host
         if ([string]::IsNullOrWhiteSpace($reply)) {
             return $DefaultYes
         }
@@ -93,7 +95,9 @@ function Read-StepAction {
     param([string]$Title)
 
     while ($true) {
-        $choice = Read-Host "Action for '$Title' (Enter = Install): [I]nstall / [S]kip / E[x]it"
+        Write-Host ""
+        Write-Host "Action for '$Title':  [I]nstall  [S]kip  E[x]it  (Enter = Install)" -ForegroundColor Magenta
+        $choice = Read-Host
         if ([string]::IsNullOrWhiteSpace($choice)) {
             return "Install"
         }
@@ -659,7 +663,7 @@ function Prepare-MeinbergAutomaticInstallFiles {
 
     $placeholderConf = @(
         "# Minimal placeholder ntp.conf for Meinberg automatic install.",
-        "# Internet servers are configured later by Step 4 of this guided installer.",
+        "# Internet servers are configured later by Step 3 of this guided installer.",
         ""
     )
     Set-Content -LiteralPath $generatedConfPath -Value $placeholderConf -Encoding ASCII
@@ -2649,7 +2653,6 @@ $installRoot = Resolve-DefaultInstallRoot
 $statsDir = Join-Path $installRoot "etc\"
 $ntpConfPath = Join-Path $installRoot "etc\ntp.conf"
 $driftFilePath = Join-Path $installRoot "etc\ntp.drift"
-$ppsRegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\NTP"
 $ppsDllPath = Join-Path $installRoot "bin\loopback-ppsapi-provider.dll"
 $downloadDir = Resolve-WorkingTempDirectory -SubFolder "occultation-ntp-installer"
 
@@ -2661,7 +2664,6 @@ $logPath = Join-Path $logDir ("guided_ntp_installer_{0}.log" -f (Get-Date -Forma
 
 $gpsConfigured = $false
 $gpsNmeaOnly = $false
-$gpsApplied = $false
 $selectedComPort = 1
 $selectedGpsMode = 17
 $selectedCountry = "NZ"
@@ -2702,11 +2704,11 @@ try {
 
     Write-Step "Welcome to the NTP Installer"
     Write-Host "This guided installer can perform any or all of the following:" -ForegroundColor Cyan
-    Write-Host " 1) Install Meinberg NTP and prepare logging"
-    Write-Host " 2) Install NTP Time Server Monitor"
-    Write-Host " 3) Configure optional GPS/PPS serial source"
-    Write-Host " 4) Configure internet NTP servers by country"
-    Write-Host " 5) Set Windows QoS priority for NTP traffic (UDP port 123)"
+    Write-Host " 1) Install Meinberg NTP (Required)"
+    Write-Host " 2) Install NTP Time Server Monitor (Recommended)"
+    Write-Host " 3) Configure internet NTP servers by country (Required)"
+    Write-Host " 4) Optimise Windows network settings for NTP - QoS and WiFi (Recommended)"
+    Write-Host " 5) Optional GPS/PPS source setup (Optional)"
     Write-Host ""
     Write-Host "Estimated time: 10-20 minutes (depends on internet speed and installer prompts)." -ForegroundColor Cyan
     Write-Host "Internet access is needed for optional downloads." -ForegroundColor Cyan
@@ -2725,23 +2727,60 @@ try {
 
     Backup-NtpRegistry
 
-    if (Confirm-Step -Title "Step 1: Install Meinberg NTP and prepare logging" -Details @(
-            "Downloads and installs Meinberg NTP.",
-            "Automatic install (recommended) uses config\\install.auto.template.ini and applies local paths.",
-            "Guided install remains available for manual screen-by-screen setup.",
-            "NTP internet server selection is done in a later step.",
-            "Install using default. Do not add any predefined servers. They will be added later in Step 4.",
-            ("Installer URL: {0}" -f $meinbergInstallerUrl),
-            ("Automatic install template: {0}" -f $meinbergAutoIniTemplatePath),
-            ("Install root: {0}" -f $installRoot),
-            ("Config file: {0}" -f $ntpConfPath),
-            ("Log folder: {0}" -f $statsDir),
-            ("Advanced (automatic if PPS is enabled): registry value {0}\\PPSProviders" -f $ppsRegistryPath)
+    # Detect the ntp.conf path the NTP service is actually using (stored as -c "path" in
+    # the service ImagePath registry value). If a prior session moved ntp.conf to ProgramData,
+    # the default Program Files path would be wrong for this entire session — all steps
+    # must write to whichever file the service reads from.
+    $svcRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\NTP"
+    if (Test-Path -LiteralPath $svcRegPath) {
+        try {
+            $imagePath = [string](Get-ItemProperty -LiteralPath $svcRegPath -Name "ImagePath" -ErrorAction Stop).ImagePath
+            $detectedConf = $null
+            if ($imagePath -match '(?i)-c\s+"([^"]+)"') {
+                $detectedConf = $Matches[1]
+            }
+            elseif ($imagePath -match '(?i)-c\s+(\S+)') {
+                $detectedConf = $Matches[1]
+            }
+            if (-not [string]::IsNullOrWhiteSpace($detectedConf) -and
+                (Resolve-Path -LiteralPath $detectedConf -ErrorAction SilentlyContinue) -ne
+                (Resolve-Path -LiteralPath $ntpConfPath -ErrorAction SilentlyContinue)) {
+                Write-Info ("Active ntp.conf from NTP service registry: {0}" -f $detectedConf)
+                Write-Info ("Overriding default path: {0}" -f $ntpConfPath)
+                $ntpConfPath = $detectedConf
+                $confParentDir = Split-Path -Parent $ntpConfPath
+                $driftFilePath = Join-Path $confParentDir "ntp.drift"
+                # If conf lives in an "etc" subfolder, look for a sibling "logs" folder for stats.
+                if ((Split-Path -Leaf $confParentDir) -ieq "etc") {
+                    $ntpDataRoot = Split-Path -Parent $confParentDir
+                    $candidateLogs = Join-Path $ntpDataRoot "logs"
+                    if (Test-Path -LiteralPath $candidateLogs) {
+                        $statsDir = $candidateLogs + "\"
+                    }
+                    else {
+                        $statsDir = $confParentDir + "\"
+                    }
+                }
+                else {
+                    $statsDir = $confParentDir + "\"
+                }
+            }
+        }
+        catch {
+            # Registry read failed — continue with default paths
+        }
+    }
+
+    if (Confirm-Step -Title "Step 1: Install Meinberg NTP (Required)" -Details @(
+            "Downloads and installs the Meinberg NTP service on this PC.",
+            "Automatic mode (recommended) installs silently with preset configuration.",
+            "Guided mode walks through the Meinberg installer screens manually.",
+            "Internet time servers are configured in Step 3 - skip adding servers here."
         )) {
 
         $meinbergInstallMode = Read-MeinbergInstallMode -IniTemplatePath $meinbergAutoIniTemplatePath
         if ($meinbergInstallMode -eq "Guided") {
-            Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added later in Step 4."
+            Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added in Step 3."
         }
 
         $meinbergInstallerPath = Join-Path $downloadDir "meinberg_installer.exe"
@@ -2811,7 +2850,7 @@ try {
                 if (-not $automaticInstallRecovered) {
                     if (Read-YesNo -Prompt "Retry Step 1 now using guided install mode?" -DefaultYes $true) {
                         Write-WarnMsg "Falling back to guided install mode for Step 1."
-                        Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added later in Step 4."
+                        Write-WarnMsg "Install using default. Do not add any predefined servers. They will be added in Step 3."
                         Install-Exe -InstallerPath $meinbergInstallerPath -Arguments @() -Label "Meinberg NTP"
                     }
                     else {
@@ -2859,11 +2898,10 @@ try {
         $restartRecommended = $true
     }
 
-    if (Confirm-Step -Title "Step 2: Install NTP Time Server Monitor" -Details @(
-            "Downloads and installs NTP Time Server Monitor.",
-            "Use this tool later to verify lock, offsets, and source selection.",
-            ("Installer URL: {0}" -f $ntpMonitorInstallerUrl),
-            "No official checksum URL is currently configured in this script."
+    if (Confirm-Step -Title "Step 2: Install NTP Time Server Monitor (Recommended)" -Details @(
+            "Downloads and installs the Meinberg NTP Time Server Monitor.",
+            "Use this tool to verify that NTP is running and connected to time servers.",
+            "Provides a graphical view of time sources, offsets, and sync status."
         )) {
 
         $monitorInstallerPath = Join-Path $downloadDir "ntp_monitor_installer.exe"
@@ -2871,17 +2909,54 @@ try {
         Install-Exe -InstallerPath $monitorInstallerPath -Arguments @($ntpMonitorInstallerArgs) -Label "NTP Time Server Monitor"
     }
 
-    if (Confirm-Step -Title "Step 3: Optional GPS/PPS source setup" -Details @(
-            "Optionally auto-detect COM port with built-in detection.",
-            "Can configure either PPS+NMEA (GPS PPS) or NMEA-only receiver mode.",
-            "Writes GPS server/fudge lines to ntp.conf.",
-            ("ntp.conf target: {0}" -f $ntpConfPath),
-            ("PPS provider DLL path (automatic if PPS mode is selected): {0}" -f $ppsDllPath),
-            "No manual registry editing is required for normal setup.",
-            ("Advanced detail: PPS mode updates {0}\\PPSProviders automatically" -f $ppsRegistryPath)
+    if (Confirm-Step -Title "Step 3: Configure internet NTP servers by country (Required)" -Details @(
+            "Selects and writes internet time server addresses into the NTP configuration.",
+            "Uses curated country profiles for Australia, New Zealand, and other key regions.",
+            "Other countries use regional pool servers from the NTP Pool Project.",
+            "This step creates the main NTP configuration file."
         )) {
 
-        Write-WarnMsg "Installing GPS receivers has not been fully tested yet. You may need to manually alter the ntp.conf file and change some parameters to get it working."
+        Write-Info ("Template:           {0}" -f $templatePath)
+        Write-Info ("Country config:     {0}" -f $countryConfigPath)
+        Write-Info ("Target config file: {0}" -f $ntpConfPath)
+
+        $countryChoice = Read-CountrySelection
+        $selectedCountry = [string]$countryChoice.Country
+        $selectedOtherCode = [string]$countryChoice.OtherCode
+
+        $servers = Resolve-ServersForCountry -CountryCode $selectedCountry -ConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath -PoolZonesPath $poolZonesPath -OtherCc $selectedOtherCode
+        Update-NtpManagedSectionsFromTemplate -TemplatePath $templatePath -Servers $servers -Port $selectedComPort -Mode $selectedGpsMode -StatsFolder $statsDir -DriftFile $driftFilePath -OutputPath $ntpConfPath
+
+        Show-InstalledServerList -Servers $servers -Country $selectedCountry -OtherCode $selectedOtherCode
+        $restartRecommended = $true
+
+        Show-CountryInstallSummary -Country $selectedCountry -OtherCode $selectedOtherCode -CountryConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath
+    }
+
+    if (Confirm-Step -Title "Step 4: Optimise Windows network settings for NTP - QoS and WiFi (Recommended)" -Details @(
+            "Applies two Windows settings that improve NTP timing accuracy on internet servers.",
+            "QoS priority: tells Windows to send and receive NTP packets before other network traffic.",
+            "WiFi performance: keeps the WiFi radio fully awake to avoid timing jitter from power saving.",
+            "Both settings are safe to apply on any PC.",
+            "Skip the WiFi setting if your PC uses a wired Ethernet connection."
+        )) {
+        Invoke-NtpQosStep | Out-Null
+        Invoke-WifiPowerSavingStep | Out-Null
+    }
+
+    if (Confirm-Step -Title "Step 5: Optional GPS/PPS source setup (Optional)" -Details @(
+            "Connects a GPS receiver as a local time source for higher accuracy.",
+            "Supports GPS PPS + NMEA mode (best accuracy) and NMEA-only mode.",
+            "Requires an ntp.conf to exist - run Step 3 first (once only, any prior run counts).",
+            "Skip this step if you are not using a GPS receiver."
+        )) {
+
+        Write-WarnMsg "GPS receiver support has not been fully tested yet. You may need to manually adjust ntp.conf settings for your hardware."
+
+        if (-not (Test-Path -LiteralPath $ntpConfPath)) {
+            Write-WarnMsg "ntp.conf does not exist yet. Run Step 3 (internet servers) first - either now or in a separate run - then re-run Step 5."
+        }
+        else {
 
         Write-Host "Select GPS mode:" -ForegroundColor Cyan
         Write-Host "  1) GPS PPS + NMEA (recommended when PPS available)"
@@ -2916,8 +2991,7 @@ try {
             Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
             Write-Host ""
             if (-not (Read-YesNo -Prompt "Is your GPS receiver connected, driver installed, and visible as a COM port?" -DefaultYes $false)) {
-                Write-WarnMsg "Skipping GPS configuration. Re-run Step 3 once the receiver is connected and driver is installed."
-                $gpsConfigured = $false
+                Write-WarnMsg "Skipping GPS configuration. Re-run Step 5 once the receiver is connected and driver is installed."
                 $skipGpsSetup = $true
             }
             else {
@@ -2956,17 +3030,12 @@ try {
 
         $selectedGpsMode = Read-GpsModeInteractive -CurrentMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
 
-        if (-not (Test-Path -LiteralPath $ntpConfPath)) {
-            Write-WarnMsg "ntp.conf not found yet. GPS lines will be applied after Step 4 completes."
-        }
-        else {
-            Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
-            $gpsApplied = $true
-            $restartRecommended = $true
-        }
+        Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
+        $restartRecommended = $true
 
         if (-not $gpsNmeaOnly) {
             Write-Info "PPS mode selected: configuring PPSProviders registry value."
+            Write-Info ("PPS provider DLL: {0}" -f $ppsDllPath)
             $ppsConfigured = Set-PpsProviderRegistryValue -DllPath $ppsDllPath
             if (-not $ppsConfigured) {
                 Write-WarnMsg "PPSProviders registry value was not set in this run."
@@ -2999,72 +3068,14 @@ try {
 
         $gpsConfigured = $true
         } # end if (-not $skipGpsSetup)
+
+        } # end if ntp.conf exists
     }
 
     if ($gpsConfigured) {
         Write-Step "GPS reminder"
         Write-WarnMsg "GPS parameters may still require tuning for your hardware and serial settings."
         Write-Info "Test behavior in NTP Time Server Monitor and refer to project documentation when available."
-    }
-
-    if (Confirm-Step -Title "Step 4: Configure internet NTP servers by country" -Details @(
-            "Uses guided installer built-in country logic.",
-            "Country profiles in ntp-country-servers.json are curated.",
-            "Other countries use pool logic and may include national UTC inventory data.",
-            ("Template: {0}" -f $templatePath),
-            ("Country config: {0}" -f $countryConfigPath),
-            ("National UTC metadata: {0}" -f $nationalUtcPath),
-            ("Pool zones metadata: {0}" -f $poolZonesPath),
-            ("Target config file: {0}" -f $ntpConfPath)
-        )) {
-
-        $countryChoice = Read-CountrySelection
-        $selectedCountry = [string]$countryChoice.Country
-        $selectedOtherCode = [string]$countryChoice.OtherCode
-
-        $servers = Resolve-ServersForCountry -CountryCode $selectedCountry -ConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath -PoolZonesPath $poolZonesPath -OtherCc $selectedOtherCode
-        Update-NtpManagedSectionsFromTemplate -TemplatePath $templatePath -Servers $servers -Port $selectedComPort -Mode $selectedGpsMode -StatsFolder $statsDir -DriftFile $driftFilePath -OutputPath $ntpConfPath
-
-        if ($gpsConfigured -and -not $gpsApplied) {
-            Write-Info "Applying deferred GPS configuration to ntp.conf."
-            Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
-            $gpsApplied = $true
-        }
-
-        Show-InstalledServerList -Servers $servers -Country $selectedCountry -OtherCode $selectedOtherCode
-        $restartRecommended = $true
-
-        Show-CountryInstallSummary -Country $selectedCountry -OtherCode $selectedOtherCode -CountryConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath
-    }
-
-    # If Step 4 was skipped but GPS was configured and ntp.conf already exists (e.g. Meinberg was
-    # installed in a prior session), apply the deferred GPS lines now rather than silently losing them.
-    if ($gpsConfigured -and -not $gpsApplied -and (Test-Path -LiteralPath $ntpConfPath)) {
-        Write-Info "Step 4 was skipped but ntp.conf is present. Applying GPS configuration now."
-        Update-GpsLines -NtpConfPath $ntpConfPath -ComPort $selectedComPort -GpsMode $selectedGpsMode -NmeaOnly:$gpsNmeaOnly
-        $gpsApplied = $true
-        $restartRecommended = $true
-    }
-    elseif ($gpsConfigured -and -not $gpsApplied) {
-        Write-WarnMsg "GPS was configured but ntp.conf does not exist yet. Run Step 4 to create ntp.conf and apply the GPS settings."
-    }
-
-    if (Confirm-Step -Title "Step 5: Prioritise NTP traffic on this PC" -Details @(
-            "Tells Windows to send NTP time-sync packets before other network traffic.",
-            "This helps keep accurate time even when the connection is busy with downloads or streaming.",
-            "Recommended for all installs."
-        )) {
-        Invoke-NtpQosStep | Out-Null
-    }
-
-    if (Confirm-Step -Title "Step 6: Set WiFi adapter to maximum performance" -Details @(
-            "WiFi adapters can use a power-saving mode that lets the radio briefly sleep between packets.",
-            "This can cause NTP time-sync packets to arrive late or unevenly, adding timing jitter of 10-50 ms.",
-            "This step tells Windows to keep your WiFi radio fully awake at all times.",
-            "Safe to apply on any PC - your internet connection and WiFi speed are not affected.",
-            "You can skip this step if your PC uses a wired Ethernet connection instead of WiFi."
-        )) {
-        Invoke-WifiPowerSavingStep | Out-Null
     }
 
     if ($restartRecommended -and -not $restartCompleted) {
