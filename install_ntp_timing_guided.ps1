@@ -2800,6 +2800,7 @@ try {
             $layout = Configure-StandaloneUserNtpAccess -InstallRoot $installRoot -CurrentNtpConfPath $ntpConfPath
             $ntpConfPath = [string]$layout.NtpConfPath
             $statsDir = [string]$layout.StatsDir
+            $driftFilePath = Join-Path (Split-Path -Parent $ntpConfPath) "ntp.drift"
             if ($layout.AllApplied) {
                 Write-Ok "Applied standard-user access layout automatically for this install."
             }
@@ -2816,6 +2817,7 @@ try {
                 $layout = Configure-StandaloneUserNtpAccess -InstallRoot $installRoot -CurrentNtpConfPath $ntpConfPath
                 $ntpConfPath = [string]$layout.NtpConfPath
                 $statsDir = [string]$layout.StatsDir
+                $driftFilePath = Join-Path (Split-Path -Parent $ntpConfPath) "ntp.drift"
                 if ($layout.AllApplied) {
                     Write-Ok "Applied standard-user access layout."
                 }
@@ -2976,14 +2978,10 @@ try {
         Show-CountryInstallSummary -Country $selectedCountry -OtherCode $selectedOtherCode -CountryConfigPath $countryConfigPath -NationalUtcPath $nationalUtcPath
     }
 
-    if (Confirm-Step -Title "Step 5: Set Windows QoS priority for NTP traffic" -Details @(
-            "Creates two Windows QoS policies that mark NTP packets with DSCP 46 (Expedited Forwarding).",
-            "DSCP 46 is the same class used for VoIP/real-time traffic.",
-            "The Windows kernel network scheduler will de-queue NTP packets ahead of best-effort traffic.",
-            "On managed networks, switches and routers that honour DiffServ will also prioritise NTP.",
-            "On home/SOHO networks this mainly benefits the local Windows scheduler.",
-            "Policy names: 'NTP Outbound Priority' (UDP dst 123), 'NTP Inbound Priority' (UDP src 123).",
-            "Any existing policies with these names will be replaced."
+    if (Confirm-Step -Title "Step 5: Prioritise NTP traffic on this PC" -Details @(
+            "Tells Windows to send NTP time-sync packets before other network traffic.",
+            "This helps keep accurate time even when the connection is busy with downloads or streaming.",
+            "Recommended for all installs."
         )) {
         Invoke-NtpQosStep | Out-Null
     }
