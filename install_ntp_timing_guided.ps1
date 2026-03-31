@@ -2390,7 +2390,7 @@ function Update-GpsLines {
 
     if ($NmeaOnly) {
         $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 6 maxpoll 7 iburst"
-        $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 0 flag2 0 refid GPS"
+        $newFudgeLine  = "fudge 127.127.20.$ComPort flag1 0 flag2 0 refid NMEA"
     }
     else {
         $newServerLine = "server 127.127.20.$ComPort mode $GpsMode minpoll 6 maxpoll 7 prefer"
@@ -2897,6 +2897,40 @@ try {
             Write-Info "Selected mode: PPS + NMEA"
         }
 
+        if ($gpsNmeaOnly) {
+            Write-Host ""
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            Write-Host " NMEA-only GPS: prerequisites" -ForegroundColor Cyan
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            Write-Host "Before continuing, make sure:" -ForegroundColor White
+            Write-Host "  1. Your GPS receiver is physically connected to a USB or serial port." -ForegroundColor White
+            Write-Host "  2. Windows has installed a driver for it." -ForegroundColor White
+            Write-Host "     - Most USB GPS receivers install automatically (Plug and Play)." -ForegroundColor White
+            Write-Host "     - If yours came with a driver disc or OEM software, install that first." -ForegroundColor White
+            Write-Host "  3. The receiver appears as a COM port in Device Manager." -ForegroundColor White
+            Write-Host "     (Device Manager -> Ports (COM & LPT) -> look for your GPS device)" -ForegroundColor White
+            Write-Host "  4. The baud rate your GPS outputs NMEA data on." -ForegroundColor White
+            Write-Host "     Most receivers default to 4800 or 9600 baud." -ForegroundColor White
+            Write-Host "     Check your receiver's manual or configuration software if unsure." -ForegroundColor White
+            Write-Host "     The installer will let you set the matching baud rate in the next step." -ForegroundColor White
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            Write-Host ""
+            if (-not (Read-YesNo -Prompt "Is your GPS receiver connected, driver installed, and visible as a COM port?" -DefaultYes $false)) {
+                Write-WarnMsg "Skipping GPS configuration. Re-run Step 3 once the receiver is connected and driver is installed."
+                $gpsConfigured = $false
+                $skipGpsSetup = $true
+            }
+            else {
+                Write-Ok "GPS receiver confirmed ready."
+                $skipGpsSetup = $false
+            }
+        }
+        else {
+            $skipGpsSetup = $false
+        }
+
+        if (-not $skipGpsSetup) {
+
         if (-not $gpsNmeaOnly) {
             $ftdiLocalPath = Join-Path $projectRoot "resources\CDM212364_Setup.exe"
             Install-FtdiDriverInteractive -LocalResourcePath $ftdiLocalPath -RemoteUrl $ftdiDriverRemoteUrl -DownloadDir $downloadDir
@@ -2964,6 +2998,7 @@ try {
         }
 
         $gpsConfigured = $true
+        } # end if (-not $skipGpsSetup)
     }
 
     if ($gpsConfigured) {
