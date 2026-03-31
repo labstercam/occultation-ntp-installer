@@ -2465,6 +2465,30 @@ function Invoke-NtpQosStep {
     }
 }
 
+function Invoke-WifiPowerSavingStep {
+    # GUIDs are stable across Windows 7 / 8 / 10 / 11 (all editions).
+    # Subgroup: Wireless Adapter Settings
+    $wirelessSubgroup  = "19cbb8fa-5279-450e-9fac-8a3d5fedd0c1"
+    # Setting: Power Saving Mode  (0 = Maximum Performance)
+    $powerSavingSetting = "12bbebe6-58d6-4636-95bb-3217ef867c1a"
+
+    try {
+        $output = powercfg /setacvalueindex SCHEME_CURRENT $wirelessSubgroup $powerSavingSetting 0 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-WarnMsg ("powercfg reported an issue: {0}" -f ($output -join ' '))
+            return $false
+        }
+        powercfg /setactive SCHEME_CURRENT 2>&1 | Out-Null
+        Write-Ok "WiFi adapter set to Maximum Performance (power saving disabled)."
+        Write-Info "This applies while the PC is plugged in to mains power."
+        return $true
+    }
+    catch {
+        Write-WarnMsg ("Failed to set WiFi power saving mode: {0}" -f $_.Exception.Message)
+        return $false
+    }
+}
+
 function Set-PpsProviderRegistryValue {
     param([string]$DllPath)
 
@@ -2984,6 +3008,16 @@ try {
             "Recommended for all installs."
         )) {
         Invoke-NtpQosStep | Out-Null
+    }
+
+    if (Confirm-Step -Title "Step 6: Set WiFi adapter to maximum performance" -Details @(
+            "WiFi adapters can use a power-saving mode that lets the radio briefly sleep between packets.",
+            "This can cause NTP time-sync packets to arrive late or unevenly, adding timing jitter of 10-50 ms.",
+            "This step tells Windows to keep your WiFi radio fully awake at all times.",
+            "Safe to apply on any PC — your internet connection and WiFi speed are not affected.",
+            "You can skip this step if your PC uses a wired Ethernet connection instead of WiFi."
+        )) {
+        Invoke-WifiPowerSavingStep | Out-Null
     }
 
     if ($restartRecommended -and -not $restartCompleted) {
