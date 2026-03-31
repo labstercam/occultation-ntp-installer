@@ -1689,20 +1689,25 @@ function Update-NtpManagedSectionsFromTemplate {
     $rendered = $rendered.Replace("{{STATSDIR}}", $StatsFolder)
     $rendered = $rendered.Replace("{{DRIFTFILE}}", $DriftFile)
 
+    $headerStart = "# >>> NTP_GUIDED_MANAGED_HEADER_START"
+    $headerEnd = "# <<< NTP_GUIDED_MANAGED_HEADER_END"
     $serverStart = "# >>> NTP_GUIDED_MANAGED_SERVERS_START"
     $serverEnd = "# <<< NTP_GUIDED_MANAGED_SERVERS_END"
     $loggingStart = "# >>> NTP_GUIDED_MANAGED_LOGGING_START"
     $loggingEnd = "# <<< NTP_GUIDED_MANAGED_LOGGING_END"
 
+    $headerBlockPattern = "(?ms)^\s*" + [regex]::Escape($headerStart) + ".*?^\s*" + [regex]::Escape($headerEnd) + "\s*$"
     $serverBlockPattern = "(?ms)^\s*" + [regex]::Escape($serverStart) + ".*?^\s*" + [regex]::Escape($serverEnd) + "\s*$"
     $loggingBlockPattern = "(?ms)^\s*" + [regex]::Escape($loggingStart) + ".*?^\s*" + [regex]::Escape($loggingEnd) + "\s*$"
 
+    $headerMatch = [regex]::Match($rendered, $headerBlockPattern)
     $serverMatch = [regex]::Match($rendered, $serverBlockPattern)
     $loggingMatch = [regex]::Match($rendered, $loggingBlockPattern)
-    if (-not $serverMatch.Success -or -not $loggingMatch.Success) {
-        throw "Template must include managed section markers for SERVERS and LOGGING."
+    if (-not $headerMatch.Success -or -not $serverMatch.Success -or -not $loggingMatch.Success) {
+        throw "Template must include managed section markers for HEADER, SERVERS and LOGGING."
     }
 
+    $managedHeaderBlock = $headerMatch.Value.TrimEnd()
     $managedServersBlock = $serverMatch.Value.TrimEnd()
     $managedLoggingBlock = $loggingMatch.Value.TrimEnd()
 
@@ -1719,20 +1724,22 @@ function Update-NtpManagedSectionsFromTemplate {
         Write-Info "Backup created: $backup"
 
         $existing = Get-Content -Raw -LiteralPath $OutputPath
-        $preserved = [regex]::Replace($existing, $serverBlockPattern + "\r?\n?", "")
+        $preserved = [regex]::Replace($existing, $headerBlockPattern + "\r?\n?", "")
+        $preserved = [regex]::Replace($preserved, $serverBlockPattern + "\r?\n?", "")
         $preserved = [regex]::Replace($preserved, $loggingBlockPattern + "\r?\n?", "")
         $preserved = [regex]::Replace($preserved, '(?ms)^\s*# Internet NTP servers \(country-specific\)\r?\n(?:.*\r?\n)*?(?=^\s*# GPS PPS / NMEA source from serial COM port)', '')
-        $preserved = [regex]::Replace($preserved, '(?ms)^\s*# Enable monitoring logs\r?\nenable stats\r?\nstatsdir "[^"]*"\r?\nstatistics loopstats\r?\nstatistics peerstats\r?\n?', '')
+        $preserved = [regex]::Replace($preserved, '(?m)^\s*# Enable monitoring logs\r?\n', '')
+        $preserved = [regex]::Replace($preserved, '(?ms)^\s*enable stats\r?\nstatsdir "[^"]*"\r?\nstatistics loopstats\r?\nstatistics peerstats\r?\n?', '')
         $preserved = $preserved.TrimEnd()
 
         if ([string]::IsNullOrWhiteSpace($preserved)) {
-            $contentToWrite = ($managedServersBlock + [Environment]::NewLine + [Environment]::NewLine + $managedLoggingBlock)
+            $contentToWrite = ($managedHeaderBlock + [Environment]::NewLine + [Environment]::NewLine + $managedServersBlock + [Environment]::NewLine + [Environment]::NewLine + $managedLoggingBlock)
         }
         else {
-            $contentToWrite = ($preserved + [Environment]::NewLine + [Environment]::NewLine + $managedServersBlock + [Environment]::NewLine + [Environment]::NewLine + $managedLoggingBlock)
+            $contentToWrite = ($managedHeaderBlock + [Environment]::NewLine + [Environment]::NewLine + $preserved + [Environment]::NewLine + [Environment]::NewLine + $managedServersBlock + [Environment]::NewLine + [Environment]::NewLine + $managedLoggingBlock)
         }
 
-        Write-Info "Preserved existing ntp.conf settings outside managed SERVERS and LOGGING sections."
+        Write-Info "Preserved existing ntp.conf settings outside managed sections."
     }
 
     Set-Content -LiteralPath $OutputPath -Value $contentToWrite -Encoding ASCII

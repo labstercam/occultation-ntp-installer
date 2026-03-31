@@ -4,6 +4,7 @@
 # - Blocks between NTP_GUIDED_MANAGED_* markers are updated by setup scripts.
 # - Other lines in ntp.conf are preserved when applying updates.
 
+# >>> NTP_GUIDED_MANAGED_HEADER_START
 # Persist clock frequency calibration across restarts
 driftfile "{{DRIFTFILE}}"
 
@@ -15,6 +16,7 @@ restrict -6 default kod nomodify notrap nopeer noquery
 # Allow ntpq / ntpdc to query the local daemon
 restrict 127.0.0.1
 restrict -6 ::1
+# <<< NTP_GUIDED_MANAGED_HEADER_END
 
 # >>> NTP_GUIDED_MANAGED_SERVERS_START
 # Internet NTP servers (country-specific)
