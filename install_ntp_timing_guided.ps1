@@ -396,6 +396,53 @@ function Ensure-FileAvailableWithRemote {
     }
 }
 
+function Refresh-RemoteFile {
+    # Always attempts to download the latest version from GitHub.
+    # If the download succeeds the local file is replaced.
+    # If the download fails and a local copy already exists, the local copy is kept and $true is returned.
+    # If the download fails and no local copy exists, $false is returned.
+    param(
+        [string]$LocalPath,
+        [string]$RemoteUrl,
+        [string]$Label
+    )
+
+    if ($script:RemoteDownloadsDisabled) {
+        Show-RemoteOverrideNotice
+        if (Test-Path -LiteralPath $LocalPath) {
+            Write-Info ("{0}: using existing local copy (remote downloads disabled)." -f $Label)
+            return $true
+        }
+        Write-WarnMsg ("{0} not found locally and remote downloads are disabled: {1}" -f $Label, $LocalPath)
+        return $false
+    }
+
+    if ([string]::IsNullOrWhiteSpace($RemoteUrl)) {
+        Write-WarnMsg ("{0}: no remote URL configured, skipping refresh." -f $Label)
+        return (Test-Path -LiteralPath $LocalPath)
+    }
+
+    try {
+        $dir = Split-Path -Parent $LocalPath
+        if (-not [string]::IsNullOrWhiteSpace($dir) -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+
+        Write-Info ("Refreshing {0} from GitHub..." -f $Label)
+        Invoke-WebRequest -Uri $RemoteUrl -OutFile $LocalPath -UseBasicParsing -TimeoutSec 20
+        Write-Ok ("Refreshed {0}: {1}" -f $Label, $LocalPath)
+        return $true
+    }
+    catch {
+        if (Test-Path -LiteralPath $LocalPath) {
+            Write-WarnMsg ("Could not refresh {0} ({1}); using existing local copy." -f $Label, $_.Exception.Message)
+            return $true
+        }
+        Write-WarnMsg ("Could not download {0} and no local copy exists: {1}" -f $Label, $_.Exception.Message)
+        return $false
+    }
+}
+
 function Check-SupportFileAvailability {
     param(
         [string]$TemplatePath,
@@ -412,12 +459,17 @@ function Check-SupportFileAvailability {
 
     Write-Info "Checking local support file availability..."
 
+    # Always refresh the template so config changes reach machines that already have a local copy.
+    $templateOk = Refresh-RemoteFile -LocalPath $TemplatePath -RemoteUrl $TemplateRemoteUrl -Label "ntp.conf template"
+    if (-not $templateOk) {
+        Write-WarnMsg "ntp.conf template is currently unavailable. Related steps may require internet access or local files."
+    }
+
     $checks = @(
-        [PSCustomObject]@{ Label = "ntp.conf template"; Local = $TemplatePath; Remote = $TemplateRemoteUrl },
-        [PSCustomObject]@{ Label = "country server config"; Local = $CountryConfigPath; Remote = $CountryConfigRemoteUrl },
-        [PSCustomObject]@{ Label = "national UTC/NTP inventory"; Local = $NationalUtcPath; Remote = $NationalUtcRemoteUrl },
-        [PSCustomObject]@{ Label = "NTP pool zones"; Local = $PoolZonesPath; Remote = $PoolZonesRemoteUrl },
-        [PSCustomObject]@{ Label = "automatic install template"; Local = $AutoIniTemplatePath; Remote = $AutoIniTemplateRemoteUrl }
+        [PSCustomObject]@{ Label = "country server config";        Local = $CountryConfigPath;        Remote = $CountryConfigRemoteUrl },
+        [PSCustomObject]@{ Label = "national UTC/NTP inventory";   Local = $NationalUtcPath;          Remote = $NationalUtcRemoteUrl },
+        [PSCustomObject]@{ Label = "NTP pool zones";               Local = $PoolZonesPath;            Remote = $PoolZonesRemoteUrl },
+        [PSCustomObject]@{ Label = "automatic install template";   Local = $AutoIniTemplatePath;      Remote = $AutoIniTemplateRemoteUrl }
     )
 
     foreach ($c in $checks) {
