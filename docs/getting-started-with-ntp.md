@@ -35,21 +35,9 @@ Below the main tabs, a **Localhost** sub-tab represents the local NTP service.
 
 When the monitor connects to the local NTP daemon, the **NTP Status** tab populates with your configured sources. If the table is empty and the status bar shows a connection error, the NTP service is not running.
 
-Start the NTP service from an Administrator command prompt:
+To start it, double-click the **Restart NTP** shortcut on the Desktop (created by the installer). Then press **F5** in NTP Time Server Monitor to refresh.
 
-```
-net start NTP
-```
-
-Then press **F5** in NTP Time Server Monitor to refresh.
-
-### Command-line alternative
-
-```
-sc query NTP
-```
-
-Expected output includes `STATE : 4  RUNNING`.
+> If the desktop shortcut is not available, see [Appendix: Command-line reference](#appendix-command-line-reference) for manual service commands.
 
 ---
 
@@ -203,11 +191,7 @@ If you installed a GPS receiver in NMEA-only mode, the GPS source offset in the 
    ```
    fudge 127.127.20.3 time2 -0.120 flag1 0 flag2 0 refid NMEA
    ```
-6. Restart the NTP service:
-   ```
-   net stop NTP
-   net start NTP
-   ```
+6. Restart the NTP service using the **Restart NTP** shortcut on the Desktop.
 7. After settling, recheck the offset. Repeat until the GPS source offset is near zero (< ±5 ms).
 
 ---
@@ -229,8 +213,7 @@ If the GPS row shows `*` (not `o`), PPS is not yet locked — NTP is using the N
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| Peer list empty / connection error in TSM | NTP service not running | `net start NTP`, then F5 in TSM |
-| All rows blank or `reach = 0` | NTP service not running | `net start NTP` |
+| Peer list empty / connection error in TSM | NTP service not running | Use the **Restart NTP** desktop shortcut, then press F5 in TSM |
 | `reach` never reaches `377` | Firewall blocking UDP 123 | Allow UDP port 123 outbound in Windows Firewall |
 | Large offset on internet sources (> 100 ms) | Clock was far out before first sync | Wait; NTP will step-correct if offset > 128 ms |
 | GPS row always blank | Wrong COM port or baud rate in ntp.conf | Re-run Step 3 of the installer |
@@ -250,4 +233,64 @@ Once NTP is stable, normal operation requires no regular attention. However, for
 - The monitor connects without error (NTP service is running).
 - Log files are being written (check timestamp on loopstats in `C:\Program Files (x86)\NTP\etc\`).
 
-Command-line equivalent: `ntpq -p` and `sc query NTP`.
+See [Appendix: Command-line reference](#appendix-command-line-reference) if you prefer command-line tools.
+
+---
+
+## Appendix: Command-line reference
+
+The following commands are available from an **Administrator command prompt**. They cover the same operations as NTP Time Server Monitor and the desktop shortcuts, and are useful for scripting or troubleshooting without a GUI.
+
+### Check if the NTP service is running
+
+```
+sc query NTP
+```
+
+Look for `STATE : 4  RUNNING`. If it shows `STOPPED`, start it with the **Restart NTP** desktop shortcut or the command below.
+
+### Start the NTP service
+
+```
+net start NTP
+```
+
+### Stop the NTP service
+
+```
+net stop NTP
+```
+
+### Restart the NTP service
+
+```
+net stop NTP
+net start NTP
+```
+
+### View the peer table
+
+Run from the Meinberg NTP `bin` folder (usually `C:\Program Files (x86)\NTP\bin\`):
+
+```
+ntpq -p
+```
+
+Output columns match the NTP Status tab — see [section 4](#4-view-the-peer-table) for column descriptions.
+
+### View detailed system variables
+
+```
+ntpq -c rv
+```
+
+Key variables:
+
+| Variable | Meaning |
+|----------|---------|
+| `stratum` | Your PC's current stratum |
+| `offset` | Current clock offset in ms |
+| `frequency` | Clock frequency correction in ppm. Normal range ±200 ppm. |
+| `sys_jitter` | System clock jitter in ms |
+| `rootdelay` | Total one-way delay to the primary reference |
+| `rootdisp` | Total dispersion — accumulated uncertainty |
