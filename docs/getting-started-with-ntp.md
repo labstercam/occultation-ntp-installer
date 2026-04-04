@@ -13,7 +13,9 @@ NTP Time Server Monitor is included with the Meinberg NTP installation and provi
 - Press **Win + S** and type **NTP Time Server Monitor**, or
 - Navigate to **Start → All Programs → Meinberg → NTP → NTP Time Server Monitor**.
 
-The monitor will auto-detect the local NTP service on startup. The main tab to use is **NTP Status**. The other tabs available are:
+The monitor will auto-detect the local NTP service on startup. The main tab to use is **NTP Status**. 
+
+The other tabs available are below, but best left alone unless you are an advanced user:
 
 | Tab | Contents |
 |-----|----------|
@@ -25,8 +27,6 @@ The monitor will auto-detect the local NTP service on startup. The main tab to u
 | **Configuration** | TSM application settings |
 | **Notification** | Alert configuration |
 
-Below the main tabs, a **Localhost** sub-tab represents the local NTP service.
-
 ---
 
 ## 2. Check the NTP service is running
@@ -35,7 +35,7 @@ Below the main tabs, a **Localhost** sub-tab represents the local NTP service.
 
 When the monitor connects to the local NTP daemon, the **NTP Status** tab populates with your configured sources. If the table is empty and the status bar shows a connection error, the NTP service is not running.
 
-To start it, double-click the **Restart NTP** shortcut on the Desktop (created by the installer). Then press **F5** in NTP Time Server Monitor to refresh.
+To start it, double-click the **Restart NTP** shortcut on the Desktop (created by the installer). The either wait a few seconds or press **F5** in NTP Time Server Monitor to refresh.
 
 > If the desktop shortcut is not available, see [Appendix: Command-line reference](#appendix-command-line-reference) for manual service commands.
 
@@ -43,14 +43,27 @@ To start it, double-click the **Restart NTP** shortcut on the Desktop (created b
 
 ## 3. Wait for NTP to settle
 
-**Checking initial connection (2–3 minutes):** After the NTP service starts, wait just 2–3 minutes and then open the **NTP Status** tab. You should see your configured servers beginning to appear with non-zero Reach values. This is enough to confirm that NTP is running, connecting to servers, and polling correctly — you do not need to wait longer to verify the configuration is working.
+**Checking initial connection (2–3 minutes):** After the NTP service starts open the **NTP Status** tab and you should see your configured servers beginning to appear with non-zero Reach values as the server starts. This is enough to confirm that NTP is running, connecting to servers, and polling correctly — you do not need to wait longer to verify the configuration is working. 
 
-**Full settling (1–2 hours):** For accurate, stable timekeeping, NTP needs more time:
+**After Installation (once off ~24 hours)**. After first installing NTP it takes time for the system to learn how your PC timing responds.  NTP accumulates this calibration data and it can take up to 24 hours for NTP to learn the drift performance. So leave the system running for a day if possible after first installing NTP.
 
-- **First lock**: allow 5–15 minutes for the service to begin correcting the clock.
-- **Stable operation**: allow 1–2 hours for offsets and jitter to reach their long-term values. The drift file accumulates calibration data over this period. It can take up to 24 hours to fully stabilise, so leave the system running for a day if possible.
+- **First lock**: It may take 5-15 minutes for NTP to acquire servers and sync them reliably. Reach = 377 is the value to look for which shows that  NTP has polled the server successfully 8 times in succession and is fully synced.
+
+- **Stable operation**: The time to stable operation after starting your PC or restarting NTP will vary depending on your PC performance, local conditions (e.g.  temperature) and the internet connection. From PC startup it could range from 5-10 minutes if you have excellent internet and NTP servers, or more than an hour. 
 
 Do not judge NTP timing accuracy in the first few minutes after a restart.
+
+**What to Look For**: The Delay and Jitter are the main figures to look for. The max timing error is half of the delay. If your delays are < 10 ms you should get very good performance. Jitter is ideally ~ 1-2 ms or so on a fibre network. If the jitter is >5 ms this will adversely affect the timing, and if jitter is in the tens of ms this indicates unstable network performance and you will likely not have accurate enough timing for occultations. 
+
+**SharpCap NTP Timing Analysis tool** will estimate the accuracy from the NTP logs over the day, and provide a ** Point In Time *** estimate of offset and accuracy. You can also look at the Statistic tab in NTP server monitor to see graphs, but these are less informative.
+
+**Understanding Offset**: The offset is how far the PC time is from the NTP server time. NTP will discpline the PC clcok to try to bring this to zero, but it does not need to be zero for occultations. You just need to know what the offset value is so you can correct it in TANGRA or PyOTE. THe Offset in the "Current local NTP status" line can be used, but a better estimate including estimated accuracy can be obtained from  **SharpCap NTP Timing Analysis tool**, under the **Tools** menu in SharpCap Occulation-Manager
+
+Ideal:
+- **Delay** no more than 20 ms, with some servers < 10 ms 
+- **Jitter** of ~  1 ms or so
+- **At least 3 servers** with this performance. 1 or 2 worse servers OK - NTP ignores them
+- **Offset** ideally close to zero, or stable.
 
 ---
 
@@ -70,7 +83,7 @@ The top of the window shows a one-line summary:
 
 This tells you at a glance which server your clock is synced to, the current offset, and your stratum level.
 
-Below that is the peer table. Each row is one time source, and rows are **colour-coded**: green = currently selected source (`*`); yellow = acceptable alternate (`+`).
+Below that is the peer table. Each row is one time source, and rows are **colour-coded**: green = currently selected source (`*`); yellow = acceptable alternate (`+`); red = not considered for time sync (`-`).
 
 | Column | Meaning |
 |--------|---------|
@@ -100,7 +113,7 @@ Below that is the peer table. Each row is one time source, and rows are **colour
 **What to look for:**
 - At least one row shows `*` (selected source).
 - Reach of `377` on your primary server — all 8 recent polls succeeded.
-- Offset within ±20 ms on internet sources is normal. Well below ±1 ms for a good GPS NMEA source.
+- Offset within ±20 ms on internet sources is normal. Well below ±1 ms for a good GPS source.
 - Jitter below 5 ms on internet sources. Below 1 ms for GPS.
 
 ### Command-line alternative

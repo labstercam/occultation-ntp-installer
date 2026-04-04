@@ -5,9 +5,9 @@ Guided Windows installer for Meinberg NTP + GPS/PPS timing setup used in occulta
 What it does:
 1. Downloads and installs Meinberg NTP
 2. Downloads and installs Meinberg NTP Time Server Monitor for Windows
-3. Assists with setting up GPS receivers for PPS and NMEA time
-4. Configures the NTP servers for specific countries to use their National Standard time server, and a set of good quality servers
-5. Optionally sets Windows QoS priority (DSCP 46) for NTP UDP port 123 traffic
+3. Configures the NTP servers for specific countries to use their National Standard time server, and a set of good quality servers
+4. Optionally sets Windows QoS priority (DSCP 46) for NTP UDP port 123 traffic and disables WiFi power saving
+5. Assists with setting up GPS receivers for PPS and NMEA time
 
 ## Step 1 Install Modes
 
@@ -72,7 +72,7 @@ Behavior by Step 1 mode:
 
 ## GPS Mode — NMEA Baud Rate Guidance
 
-When **GPS NMEA-only** mode is selected in Step 3, the GPS mode prompt recommends:
+When **GPS NMEA-only** mode is selected in Step 5, the GPS mode prompt recommends:
 
 - **Mode 17** — 9600 baud (default, recommended)
 - **Mode 1** — 4800 baud (alternative recommended)
@@ -81,7 +81,7 @@ NMEA sentences work most reliably at these lower baud rates. Higher baud modes (
 
 ## GPS PPS — FTDI USB Serial Driver
 
-When configuring GPS PPS + NMEA mode (Step 3), the installer asks:
+When configuring GPS PPS + NMEA mode (Step 5), the installer asks:
 
 ```
 Have you already installed the FTDI USB serial driver for the GPS PPS device? [y/N]
@@ -91,19 +91,15 @@ If No, it downloads `CDM212364_Setup.exe` from the repository `resources/` folde
 
 ## Desktop Shortcut — Restart NTP
 
-At the end of a successful install run the installer prompts:
-
-```
-Do you want to add a Desktop shortcut for Restarting NTP (recommended)? [Y/n]
-```
-
-Answering Yes (default) creates **Restart NTP.lnk** on the all-users Desktop pointing to `restartntp.bat` in the Meinberg `bin` folder. If `restart.ico` is present in the same folder it is used as the icon. Requires the standard-user layout (Step 1) to be applied so non-admin users can execute the script.
+At the end of Step 1 (Meinberg NTP install) the installer automatically creates **Restart NTP.lnk** on the all-users Desktop pointing to `restartntp.bat` in the Meinberg `bin` folder. If `restart.ico` is present in the same folder it is used as the icon. Requires the standard-user layout (Step 1) to be applied so non-admin users can execute the script.
 
 ## GPS Refclock Poll Interval
 
-The GPS/PPS serial refclock is configured with `minpoll 6 maxpoll 7` (64–128 s adaptive). This reduces unnecessary polling of the local serial driver while staying well within the NTP discipline window.
+The GPS/PPS serial refclock poll interval is set differently per mode:
+- **PPS + NMEA**: `minpoll 4 maxpoll 4` (fixed 16 s) — keeps the PPS discipline loop tight.
+- **NMEA-only**: no poll parameters set (NTP default of 16 s applies).
 
-## Windows QoS Priority for NTP (Step 5)
+## Windows QoS Priority for NTP (Step 4)
 
 Step 5 creates two Windows Policy-based QoS rules that mark NTP packets with **DSCP 46** (Expedited Forwarding — the same class used for VoIP):
 
@@ -116,7 +112,7 @@ Step 5 is optional and can be skipped or re-run at any time.
 
 ## Registry Backup
 
-At startup, after you confirm you want to proceed, the installer automatically exports the `HKLM\SYSTEM\CurrentControlSet\Services\NTP` registry key to a timestamped `.reg` file in your **Downloads** folder (e.g. `NTP_registry_backup_20260328_120000.reg`). A notification dialog confirms the backup path. Double-clicking the file restores the key if needed. If the NTP service key does not yet exist the backup step is silently skipped.
+At startup, after you confirm you want to proceed, the installer automatically exports the `HKLM\SYSTEM\CurrentControlSet\Services\NTP` registry key to a timestamped `.reg` file in your **Downloads** folder (e.g. `NTP_registry_backup_20260328_120000.reg`). The backup path is printed to the installer console output. Double-clicking the file restores the key if needed. If the NTP service key does not yet exist the backup step is silently skipped.
 
 ## Basic Troubleshooting
 

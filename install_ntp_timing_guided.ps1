@@ -25,13 +25,7 @@ function Backup-NtpRegistry {
     try {
         $null = reg export $ntpKeyPath $backupPath /y 2>&1
         Write-Ok "Registry backup saved to: $backupPath"
-        Write-Host ""
-        [System.Windows.Forms.MessageBox]::Show(
-            "A backup of the NTP registry key has been saved to:`n`n$backupPath`n`nYou can restore it by double-clicking the .reg file if needed.",
-            "Registry Backup Created",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        ) | Out-Null
+        Write-Info "You can restore it by double-clicking the .reg file if needed."
     }
     catch {
         Write-WarnMsg ("Registry backup failed: {0}" -f $_.Exception.Message)
