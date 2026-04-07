@@ -40,18 +40,24 @@
     ]
   },
   "US": {
-    "description": "United States profile using mixed NIST site diversity plus US pool fallback",
+    "description": "United States profile: one random Gaithersburg NIST server, one random Boulder NIST server, plus three US pool fallback servers",
     "notes": [
-      "Includes two US pool servers as fallback for observers with weak NIST network paths; replace with better local servers after ntpq/loopstats review if needed."
+      "Gaithersburg servers (time-[a-d]-g.nist.gov): one selected at random each install run.",
+      "Boulder servers (time-[a-c]-b.nist.gov): one selected at random each install run.",
+      "Three US pool servers provide fallback diversity.",
+      "Replace pool servers with better local servers after ntpq/loopstats review if desired."
     ],
     "servers": [
-      "time.nist.gov iburst",
       "time-a-g.nist.gov iburst",
       "time-b-g.nist.gov iburst",
+      "time-c-g.nist.gov iburst",
+      "time-d-g.nist.gov iburst",
       "time-a-b.nist.gov iburst",
-      "time-a-wwv.nist.gov iburst",
+      "time-b-b.nist.gov iburst",
+      "time-c-b.nist.gov iburst",
       "0.us.pool.ntp.org iburst",
-      "1.us.pool.ntp.org iburst"
+      "1.us.pool.ntp.org iburst",
+      "2.us.pool.ntp.org iburst"
     ]
   }
 }

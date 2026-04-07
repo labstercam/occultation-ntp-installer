@@ -1484,6 +1484,47 @@ function Resolve-AuServersInteractive {
     return ,@($selected)
 }
 
+function Resolve-UsServersRandom {
+    param([string]$ConfigPath)
+
+    $entry = Get-CountryConfigEntry -CountryCode "US" -ConfigPath $ConfigPath
+    if ($null -eq $entry) {
+        throw "Country 'US' not found in $ConfigPath"
+    }
+
+    $all = @($entry.servers)
+
+    $gServers = @($all | Where-Object {
+        (Get-ServerHostFromEntry -Entry $_) -match '^time-[a-d]-g\.nist\.gov$'
+    })
+
+    $bServers = @($all | Where-Object {
+        (Get-ServerHostFromEntry -Entry $_) -match '^time-[a-c]-b\.nist\.gov$'
+    })
+
+    $poolServers = @($all | Where-Object {
+        (Get-ServerHostFromEntry -Entry $_) -match '^[0-9]+\.us\.pool\.ntp\.org$'
+    } | Select-Object -First 3)
+
+    $selected = @()
+
+    if ($gServers.Count -gt 0) {
+        $picked = $gServers | Get-Random
+        $selected += $picked
+        Write-Info ("Selected Gaithersburg NIST server: {0}" -f (Get-ServerHostFromEntry -Entry $picked))
+    }
+
+    if ($bServers.Count -gt 0) {
+        $picked = $bServers | Get-Random
+        $selected += $picked
+        Write-Info ("Selected Boulder NIST server: {0}" -f (Get-ServerHostFromEntry -Entry $picked))
+    }
+
+    $selected = Add-UniqueServers -Base $selected -ToAdd $poolServers
+
+    return ,@($selected)
+}
+
 function Select-NationalServersInteractive {
     param([string[]]$Servers)
 
@@ -1663,6 +1704,10 @@ function Resolve-ServersForCountry {
 
     if ($CountryCode -eq "AU") {
         return Resolve-AuServersInteractive -ConfigPath $ConfigPath
+    }
+
+    if ($CountryCode -eq "US") {
+        return Resolve-UsServersRandom -ConfigPath $ConfigPath
     }
 
     return Get-CountryServers -CountryCode $CountryCode -ConfigPath $ConfigPath
