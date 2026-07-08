@@ -44,7 +44,7 @@ Behavior by Step 1 mode:
 5. If GitHub is unavailable but a previously downloaded local copy exists, you can choose to continue in offline mode.
 6. Follow the guided installer prompts.
 
-Once installed successfully follow 'docs/getting-started-with-ntp.md' - Getting started with NTP guide for help with NTP.
+Once installed successfully follow [Getting started with NTP](https://github.com/labstercam/occultation-ntp-installer/blob/main/docs/getting-started-with-ntp.md) guide for help in learning how to use and understand NTP.
 
 ## Repository Files
 
