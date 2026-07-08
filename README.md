@@ -44,6 +44,8 @@ Behavior by Step 1 mode:
 5. If GitHub is unavailable but a previously downloaded local copy exists, you can choose to continue in offline mode.
 6. Follow the guided installer prompts.
 
+Once installed successfully follow 'docs/getting-started-with-ntp.md' - Getting started with NTP guide for help with NTP.
+
 ## Repository Files
 
 - `install_ntp_timing_guided.cmd`:
@@ -64,7 +66,7 @@ Behavior by Step 1 mode:
   National UTC/NTP authority metadata.
 
 ## Documentation
-
+- 'docs/getting-started-with-ntp.md' - Getting started with NTP guide
 - `docs/automated-setup.md`:
   Detailed usage, automation flow, and advanced examples.
 - `docs/release-instructions.md`:
