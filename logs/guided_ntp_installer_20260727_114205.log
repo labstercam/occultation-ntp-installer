@@ -1,0 +1,109 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260727114206
+Username: ASTROPC\AstroPC
+RunAs User: ASTROPC\AstroPC
+Configuration Name: 
+Machine: ASTROPC (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\AstroPC\Documents\GitHub\occultation-ntp-installer\install_ntp_timing_guided.ps1
+Process ID: 14280
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[INFO] Checking local support file availability...
+[INFO] Refreshing ntp.conf template from GitHub...
+[ OK ] Refreshed ntp.conf template: C:\Users\AstroPC\Documents\GitHub\occultation-ntp-installer\config\ntp.conf.template
+
+=== Welcome to the NTP Installer ===
+This guided installer can perform any or all of the following:
+ 1) Install Meinberg NTP (Required)
+ 2) Install NTP Time Server Monitor (Recommended)
+ 3) Configure internet NTP servers by country (Required)
+ 4) Optimise Windows network settings for NTP - QoS and WiFi (Recommended)
+ 5) Optional GPS/PPS source setup (Optional)
+
+Estimated time: 10-20 minutes (depends on internet speed and installer prompts).
+Internet access is needed for optional downloads.
+You can safely skip any step and run this installer again later.
+If Windows shows security/UAC prompts for trusted installers, choose Allow/Yes to continue.
+
+Each step is optional. At every step you can choose: Install, Skip, or Exit.
+You can also do all steps manually and follow project documentation when available.
+Installer log: C:\Users\AstroPC\Documents\GitHub\occultation-ntp-installer\logs\guided_ntp_installer_20260727_114205.log
+Resolved NTP install root: C:\Program Files (x86)\NTP
+Resolved working folder: C:\Users\AstroPC\AppData\Local\Temp\occultation-ntp-installer
+
+Proceed with guided installer?  [Y/n]
+[ OK ] Registry backup saved to: C:\Users\AstroPC\Downloads\NTP_registry_backup_20260727_114210.reg
+[INFO] You can restore it by double-clicking the .reg file if needed.
+[INFO] Active ntp.conf from NTP service registry: C:\NTP\etc\ntp.conf
+[INFO] Overriding default path: C:\Program Files (x86)\NTP\etc\ntp.conf
+
+=== Step 1: Install Meinberg NTP (Required) ===
+ - Downloads and installs the Meinberg NTP service on this PC.
+ - Automatic mode (recommended) installs silently with preset configuration.
+ - Guided mode walks through the Meinberg installer screens manually.
+ - Internet time servers are configured in Step 3 - skip adding servers here.
+
+Action for 'Step 1: Install Meinberg NTP (Required)':  [I]nstall  [S]kip  E[x]it  (Enter = Install)
+[WARN] Step skipped: Step 1: Install Meinberg NTP (Required)
+
+=== Step 2: Install NTP Time Server Monitor (Recommended) ===
+ - Downloads and installs the Meinberg NTP Time Server Monitor.
+ - Use this tool to verify that NTP is running and connected to time servers.
+ - Provides a graphical view of time sources, offsets, and sync status.
+
+Action for 'Step 2: Install NTP Time Server Monitor (Recommended)':  [I]nstall  [S]kip  E[x]it  (Enter = Install)
+[INFO] Downloading NTP Time Server Monitor from https://www.meinbergglobal.com/download/ntp/windows/time-server-monitor/ntp-time-server-monitor-104.exe
+[ OK ] Downloaded NTP Time Server Monitor to C:\Users\AstroPC\AppData\Local\Temp\occultation-ntp-installer\ntp_monitor_installer.exe
+[WARN] NTP Time Server Monitor silent arguments are empty; starting installer without arguments (interactive mode).
+[INFO] Starting installer: NTP Time Server Monitor
+[ OK ] NTP Time Server Monitor installation completed
+[INFO] Setting RUNASADMIN flag for NTP Time Server Monitor...
+[WARN] Could not locate NTP Time Server Monitor executable.
+[WARN] You may need to manually set 'Run as administrator' in the executable's Compatibility tab.
+[INFO] Typical location: C:\Program Files (x86)\Meinberg\NTP\bin\NTPMonitor.exe
+
+=== Step 3: Configure internet NTP servers by country (Required) ===
+ - Selects and writes internet time server addresses into the NTP configuration.
+ - Uses curated country profiles for Australia, New Zealand, and other key regions.
+ - Other countries use regional pool servers from the NTP Pool Project.
+ - This step creates the main NTP configuration file.
+
+Action for 'Step 3: Configure internet NTP servers by country (Required)':  [I]nstall  [S]kip  E[x]it  (Enter = Install)
+[WARN] Step skipped: Step 3: Configure internet NTP servers by country (Required)
+
+=== Step 4: Optimise Windows network settings for NTP - QoS and WiFi (Recommended) ===
+ - Applies two Windows settings that improve NTP timing accuracy on internet servers.
+ - QoS priority: tells Windows to send and receive NTP packets before other network traffic.
+ - WiFi performance: keeps the WiFi radio fully awake to avoid timing jitter from power saving.
+ - Both settings are safe to apply on any PC.
+ - Skip the WiFi setting if your PC uses a wired Ethernet connection.
+
+Action for 'Step 4: Optimise Windows network settings for NTP - QoS and WiFi (Recommended)':  [I]nstall  [S]kip  E[x]it  (Enter = Install)
+[WARN] Step skipped: Step 4: Optimise Windows network settings for NTP - QoS and WiFi (Recommended)
+
+=== Step 5: Optional GPS/PPS source setup (Optional) ===
+ - Connects a GPS receiver as a local time source for higher accuracy.
+ - Supports GPS PPS + NMEA mode (best accuracy) and NMEA-only mode.
+ - Requires an ntp.conf to exist - run Step 3 first (once only, any prior run counts).
+ - Skip this step if you are not using a GPS receiver.
+
+Action for 'Step 5: Optional GPS/PPS source setup (Optional)':  [I]nstall  [S]kip  E[x]it  (Enter = Install)
+[WARN] Step skipped: Step 5: Optional GPS/PPS source setup (Optional)
+
+=== Completed ===
+[ OK ] Guided installer finished.
+You can run this installer again and complete any skipped steps later.
+You can also install all components manually and use project documentation.
+Log written to: C:\Users\AstroPC\Documents\GitHub\occultation-ntp-installer\logs\guided_ntp_installer_20260727_114205.log
+**********************
+Windows PowerShell transcript end
+End time: 20260727114304
+**********************

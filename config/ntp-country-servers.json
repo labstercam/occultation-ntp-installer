@@ -1,4 +1,4 @@
-{
+﻿{
   "NZ": {
     "description": "New Zealand profile with MSL Stratum 1 national standard pool plus InternetNZ ntp.net.nz city servers; apply MSL and InternetNZ usage policies",
     "servers": [
@@ -12,7 +12,7 @@
   "AU": {
     "description": "Australia profile with three tiers: NMI UTC(AUS) servers, university public NTP servers, and AU pool fallback (au.pool plus 0..3)",
     "notes": [
-      "Tier order: NMI servers first, university servers second, au.pool fallback last (au.pool.ntp.org plus 0..3.au.pool.ntp.org).",
+      "Tier order: NMI servers first, university servers second, au.pool fallback last (au.pool.ntp.org plus 0..4.au.pool.ntp.org).",
       "University server AUP differs by provider and availability may vary.",
       "Do not override default polling intervals for university servers.",
       "Use iburst consistently for all server entries in this profile.",
@@ -28,7 +28,6 @@
       "ntp.brisbane.nmi.gov.au iburst",
       "ntp.unimelb.edu.au iburst",
       "ntp.anu.edu.au iburst",
-      "ntp.adelaide.edu.au iburst",
       "ntp.utas.edu.au iburst",
       "ntp.monash.edu.au iburst",
       "ntp.curtin.edu.au iburst",
@@ -37,6 +36,7 @@
       "1.au.pool.ntp.org iburst",
       "2.au.pool.ntp.org iburst",
       "3.au.pool.ntp.org iburst"
+      "4.au.pool.ntp.org iburst"
     ]
   },
   "US": {
@@ -61,3 +61,4 @@
     ]
   }
 }
+

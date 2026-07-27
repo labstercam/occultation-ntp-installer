@@ -41,7 +41,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 - Step 1 mode choice:
   - `Automatic install (recommended)` using `config/install.auto.template.ini` and Meinberg `/USE_FILE`.
   - `Guided install (manual screens)` interactive installer flow.
-- Optional download/install of NTP Time Server Monitor.
+- Optional download/install of NTP Time Server Monitor. Setup to Run on Startup, run as Administrator and DNS lookup.
 - Optional GPS/PPS setup with COM auto-detection or manual COM entry.
 - Country-based server setup using curated profiles and fallback logic.
 - Marker-based managed updates to `ntp.conf` while preserving unrelated config.

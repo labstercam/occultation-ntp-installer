@@ -1412,24 +1412,38 @@ function Resolve-AuServersInteractive {
 
     $poolNumbered = @($all | Where-Object {
             $h = Get-ServerHostFromEntry -Entry $_
-            $h -match '^[0-3]\.au\.pool\.ntp\.org$'
+            $h -match '^[0-4]\.au\.pool\.ntp\.org$'
         } | Select-Object -Unique)
 
-    if ($poolNumbered.Count -lt 4) {
-        $poolNumbered = @("0.au.pool.ntp.org iburst", "1.au.pool.ntp.org iburst", "2.au.pool.ntp.org iburst", "3.au.pool.ntp.org iburst")
+    if ($poolNumbered.Count -lt 5) {
+        $poolNumbered = @("0.au.pool.ntp.org iburst", "1.au.pool.ntp.org iburst", "2.au.pool.ntp.org iburst", "3.au.pool.ntp.org iburst", "4.au.pool.ntp.org iburst")
     }
 
     $selected = @()
     $nmiUsed = $false
 
-    Write-Info "Select the NTP servers to use."
+
+    # Add all 5 pool servers first (always)
+    foreach ($pool in $poolNumbered) {
+        $selected = Add-UniqueServers -Base $selected -ToAdd @($pool)
+    }
+    Write-Info "Five AU NTP pool servers have been added."
+    Write-Info "You can add more servers from Universities or the National Measurement Institute."
     Write-Host "Where possible, choose servers that are near to you." -ForegroundColor Cyan
     Write-Host "Prefer servers in the same or neighbouring city/state/territory." -ForegroundColor Cyan
 
+    # University selection (up to 2)
+    $chosenEdu = Select-ServersFromListInteractive -Header "Select up to 2 University servers.`nChoose ones nearest to your city/state/territory.`nEnter server number(s) separated by comma (for example: 1,2), or press Enter for 0." -Prompt "Select University servers." -Servers $eduAll -MaxCount 2
+    $selected = Add-UniqueServers -Base $selected -ToAdd $chosenEdu
+
+    # NMI selection (optional)
     Write-Host "" 
     Write-Host "Do you want to use NTP servers from the National Measurement Institute (NMI)?" -ForegroundColor Cyan
     Write-Host "These are the best servers and are traceable to UTC." -ForegroundColor Cyan
     Write-Host "However, you must register your computer and use a static IP address." -ForegroundColor Cyan
+    Write-Host "A static IP address is a paid service from your ISP provider." -ForegroundColor Cyan
+    Write-Host "Contact your ISP provider to pay for and obtain a static IP address" -ForegroundColor Yellow
+    Write-Host "To register with NMI, email time@measurement.gov.au" -ForegroundColor Yellow
     Write-Host "Details will be provided." -ForegroundColor Cyan
     $useNmi = Read-YesNo -Prompt "Use NMI servers?" -DefaultYes $true
     if ($useNmi) {
@@ -1442,27 +1456,12 @@ function Resolve-AuServersInteractive {
         $nmiUsed = $true
 
         $remainingNmi = @($nmiAll | Where-Object { (Get-ServerHostFromEntry -Entry $_) -ne 'ntp.nmi.gov.au' } | Select-Object -Unique)
-        $chosenNmi = Select-ServersFromListInteractive -Header "Select up to 2 NMI servers.`nChoose ones nearest to your city/state/territory.`nAdditional servers will be added in the next steps." -Prompt "Select NMI servers." -Servers $remainingNmi -MaxCount 2
+        $chosenNmi = Select-ServersFromListInteractive -Header "Select up to 2 NMI servers.`nChoose ones nearest to your city/state/territory." -Prompt "Select NMI servers." -Servers $remainingNmi -MaxCount 2
         $selected = Add-UniqueServers -Base $selected -ToAdd $chosenNmi
     }
 
-    $chosenEdu = Select-ServersFromListInteractive -Header "Select up to 2 University servers.`nChoose ones nearest to your city/state/territory.`nEnter server number(s) separated by comma (for example: 1,2), or press Enter for 0.`nAdditional servers will be added in the next steps." -Prompt "Select University servers." -Servers $eduAll -MaxCount 2
-    $selected = Add-UniqueServers -Base $selected -ToAdd $chosenEdu
-
-    foreach ($pool in $poolNumbered) {
-        if ($selected.Count -ge 5) {
-            break
-        }
-        $selected = Add-UniqueServers -Base $selected -ToAdd @($pool)
-    }
-
     if ($selected.Count -lt 5) {
-        if ($selected.Count -eq $poolNumbered.Count -and $poolNumbered.Count -eq 4) {
-            Write-Info "Using the 4 standard numbered AU pool servers. Add NMI or University servers if you want a fifth unique source."
-        }
-        else {
-            Write-WarnMsg "Not enough numbered AU pool servers were available to reach 5 unique entries."
-        }
+        Write-WarnMsg "Not enough numbered AU pool servers were available to reach 5 unique entries."
     }
 
     Write-Step "AU server selection summary"
@@ -1471,7 +1470,8 @@ function Resolve-AuServersInteractive {
     }
 
     if ($nmiUsed) {
-        Write-WarnMsg "You must register to use NMI servers, and have a static IP address."
+        Write-WarnMsg "You must register to use NMI servers, and have a static IP address which is a special, paid service from your ISP."
+        Write-Host "Contact your ISP provider to pay for and obtain a static IP address" -ForegroundColor Yellow
         Write-Host "To register, email time@measurement.gov.au" -ForegroundColor Yellow
         Write-Host "More details:" -ForegroundColor Yellow
         Write-Host "https://www.industry.gov.au/national-measurement-institute/nmi-services/physical-measurement-services/time-and-frequency-services" -ForegroundColor Yellow
@@ -2607,6 +2607,139 @@ function Try-RestartNtpService {
     }
 }
 
+function Set-RunAsAdminForExe {
+    param([string]$ExePath)
+
+    if (-not (Test-Path -LiteralPath $ExePath)) {
+        Write-WarnMsg "Executable not found: $ExePath"
+        return $false
+    }
+
+    $fullPath = (Resolve-Path -LiteralPath $ExePath).Path
+    $layersKey = "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
+
+    try {
+        # Create key if it doesn't exist
+        if (-not (Test-Path -LiteralPath $layersKey)) {
+            New-Item -Path $layersKey -Force | Out-Null
+        }
+
+        # Check if already set
+        $currentValue = Get-ItemProperty -LiteralPath $layersKey -Name $fullPath -ErrorAction SilentlyContinue
+        if ($null -ne $currentValue -and [string]$currentValue.$fullPath -eq "RUNASADMIN") {
+            Write-Info "RUNASADMIN flag already set for: $fullPath"
+            return $true
+        }
+
+        # Set the RUNASADMIN flag
+        Set-ItemProperty -LiteralPath $layersKey -Name $fullPath -Value "RUNASADMIN" -Type String -Force
+        Write-Ok "Set RUNASADMIN flag for: $fullPath"
+        return $true
+    }
+    catch {
+        Write-WarnMsg ("Failed to set RUNASADMIN flag for {0}: {1}" -f $fullPath, $_.Exception.Message)
+        return $false
+    }
+}
+
+function Find-NtpMonitorExe {
+    # Common installation paths for Meinberg NTP Time Server Monitor
+    $candidates = @()
+
+    # Program Files (x86) paths (most likely for 32-bit installer)
+    $pf86 = ${env:ProgramFiles(x86)}
+    if (-not [string]::IsNullOrWhiteSpace($pf86)) {
+        $candidates += Join-Path $pf86 "Meinberg\NTP\bin\NTPMonitor.exe"
+        $candidates += Join-Path $pf86 "Meinberg\NTP Time Server Monitor\NTPMonitor.exe"
+        $candidates += Join-Path $pf86 "Meinberg\NTPMonitor.exe"
+    }
+
+    # Program Files paths
+    $pf64 = $env:ProgramFiles
+    if (-not [string]::IsNullOrWhiteSpace($pf64)) {
+        $candidates += Join-Path $pf64 "Meinberg\NTP\bin\NTPMonitor.exe"
+        $candidates += Join-Path $pf64 "Meinberg\NTP Time Server Monitor\NTPMonitor.exe"
+        $candidates += Join-Path $pf64 "Meinberg\NTPMonitor.exe"
+    }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    return ""
+}
+
+function Set-NtpMonitorPostInstallConfig {
+    param([string]$MonitorExePath)
+
+    if ([string]::IsNullOrWhiteSpace($MonitorExePath) -or -not (Test-Path -LiteralPath $MonitorExePath)) {
+        Write-WarnMsg "NTP Time Server Monitor executable not found; cannot set post-install configuration."
+        return $false
+    }
+
+    $fullExePath = (Resolve-Path -LiteralPath $MonitorExePath).Path
+    $configKey = "HKLM:\SOFTWARE\WOW6432Node\Meinberg Funkuhren\NTPTimeServerMonitor"
+
+    try {
+        # Create the key if it doesn't exist
+        if (-not (Test-Path -LiteralPath $configKey)) {
+            New-Item -Path $configKey -Force | Out-Null
+        }
+
+        # Set NTPAutoStart = 1 (DWORD)
+        Set-ItemProperty -LiteralPath $configKey -Name "NTPAutoStart" -Value 1 -Type DWord -Force
+        Write-Info "Set NTPAutoStart = 1 (Run at System Start)"
+
+        # Set NTPDNSLookup = -1 (DWORD) - Note: the app uses -1 for enabled, 0 for disabled
+        # Based on typical Windows app patterns: -1 = TRUE, 0 = FALSE
+        Set-ItemProperty -LiteralPath $configKey -Name "NTPDNSLookup" -Value -1 -Type DWord -Force
+        Write-Info "Set NTPDNSLookup = -1 (Enable DNS Lookup)"
+
+        # Add to Windows startup for the logged-on user
+        # Get the currently logged-on user SID
+        $loggedOnUser = $null
+        try {
+            $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+            $loggedOnUserName = $cs.UserName
+            if (-not [string]::IsNullOrWhiteSpace($loggedOnUserName)) {
+                $domain, $user = $loggedOnUserName -split '\\'
+                if ($null -eq $user) { $user = $domain; $domain = $env:COMPUTERNAME }
+                $account = Get-CimInstance -ClassName Win32_UserAccount -Filter "Name='$user' AND Domain='$domain'" -ErrorAction Stop
+                if ($null -ne $account) {
+                    $loggedOnUser = $account.SID
+                }
+            }
+        }
+        catch {
+            Write-WarnMsg "Could not determine logged-on user SID: $($_.Exception.Message)"
+        }
+
+        if ($null -ne $loggedOnUser) {
+            $runKeyPath = "Registry::HKEY_USERS\$loggedOnUser\Software\Microsoft\Windows\CurrentVersion\Run"
+            if (-not (Test-Path -LiteralPath $runKeyPath)) {
+                New-Item -Path $runKeyPath -Force | Out-Null
+            }
+            Set-ItemProperty -LiteralPath $runKeyPath -Name "NTPTimeServerMonitor" -Value "`"$fullExePath`"" -Type String -Force
+            Write-Info "Added NTP Time Server Monitor to Windows startup for user $loggedOnUserName"
+        } else {
+            # Fallback to HKCU (Administrator account's Run key)
+            $runKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+            Set-ItemProperty -LiteralPath $runKeyPath -Name "NTPTimeServerMonitor" -Value "`"$fullExePath`"" -Type String -Force
+            Write-Info "Added NTP Time Server Monitor to Windows startup (Administrator account)"
+        }
+
+        Write-Ok "NTP Time Server Monitor configuration applied: Run at System Start and Enable DNS Lookup are now enabled."
+        return $true
+    }
+    catch {
+        Write-WarnMsg ("Failed to set NTP Time Server Monitor configuration: {0}" -f $_.Exception.Message)
+        Write-WarnMsg "You may need to manually enable 'Run at System Start' and 'Enable DNS Lookup' in the application settings."
+        return $false
+    }
+}
+
 function New-RestartNtpDesktopShortcut {
     param([string]$InstallRoot)
 
@@ -2947,6 +3080,31 @@ try {
         $monitorInstallerPath = Join-Path $downloadDir "ntp_monitor_installer.exe"
         Invoke-InstallerDownload -Url $ntpMonitorInstallerUrl -OutputPath $monitorInstallerPath -Label "NTP Time Server Monitor"
         Install-Exe -InstallerPath $monitorInstallerPath -Arguments @($ntpMonitorInstallerArgs) -Label "NTP Time Server Monitor"
+        
+        # Set RUNASADMIN flag for NTP Time Server Monitor executable
+        Write-Info "Setting RUNASADMIN flag for NTP Time Server Monitor..."
+        $monitorExePath = Find-NtpMonitorExe
+        if (-not [string]::IsNullOrWhiteSpace($monitorExePath)) {
+            $success = Set-RunAsAdminForExe -ExePath $monitorExePath
+            if ($success) {
+                Write-Ok "NTP Time Server Monitor will now always run as administrator."
+            } else {
+                Write-WarnMsg "Could not set RUNASADMIN flag for NTP Time Server Monitor."
+                Write-WarnMsg "You may need to manually set 'Run as administrator' in the executable's Compatibility tab."
+            }
+            
+            # Apply post-install configuration: Run at System Start and Enable DNS Lookup
+            Write-Info "Applying NTP Time Server Monitor configuration..."
+            $configSuccess = Set-NtpMonitorPostInstallConfig -MonitorExePath $monitorExePath
+            if (-not $configSuccess) {
+                Write-WarnMsg "Could not apply NTP Time Server Monitor configuration."
+                Write-WarnMsg "You may need to manually enable 'Run at System Start' and 'Enable DNS Lookup' in the application settings."
+            }
+        } else {
+            Write-WarnMsg "Could not locate NTP Time Server Monitor executable."
+            Write-WarnMsg "You may need to manually set 'Run as administrator' in the executable's Compatibility tab."
+            Write-Info "Typical location: C:\Program Files (x86)\Meinberg\NTP\bin\NTPMonitor.exe"
+        }
     }
 
     if (Confirm-Step -Title "Step 3: Configure internet NTP servers by country (Required)" -Details @(

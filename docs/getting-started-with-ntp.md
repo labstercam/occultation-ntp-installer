@@ -7,11 +7,12 @@ This guide covers what to check after running the installer to confirm NTP is wo
 
 ## 1. Open NTP Time Server Monitor
 
-NTP Time Server Monitor is included with the Meinberg NTP installation and provides a graphical view of the NTP service status, peer connections, and system timing state — no command line needed.
+NTP Time Server Monitor is included with the Meinberg NTP installation and provides a graphical view of the NTP service status, peer connections, and system timing state — no command line needed. Recommended that you install it with the Occultation NTP Installer as if you do it will configure it to run on Windows Startup as Administrator (so all feature are available), have an icon in the System Tray and use DNS lookup for readable server names.
 
 **To open it:**
-- Press **Win + S** and type **NTP Time Server Monitor**, or
-- Navigate to **Start → All Programs → Meinberg → NTP → NTP Time Server Monitor**.
+- Open the  System Tray (up arrow in bottom RHS of Start Menu), right click the Icon and 'Show Monitor
+- Or Press **Win + S** and type **NTP Time Server Monitor**, or
+- Or Navigate to **Start → All Programs → Meinberg → NTP → NTP Time Server Monitor**.
 
 The monitor will auto-detect the local NTP service on startup. The main tab to use is **NTP Status**. 
 
@@ -35,9 +36,9 @@ The other tabs available are below, but best left alone unless you are an advanc
 
 When the monitor connects to the local NTP daemon, the **NTP Status** tab populates with your configured sources. If the table is empty and the status bar shows a connection error, the NTP service is not running.
 
-To start it, double-click the **Restart NTP** shortcut on the Desktop (created by the installer). The either wait a few seconds or press **F5** in NTP Time Server Monitor to refresh.
+To start it, double-click the **Restart NTP** shortcut on the Desktop (created by the installer) or go to the 'NTP Service' tab in Time Server Monitor and press 'Restart NTP service' (requires admin setup). The either wait a few seconds or press **F5** in NTP Time Server Monitor to refresh.
 
-> If the desktop shortcut is not available, see [Appendix: Command-line reference](#appendix-command-line-reference) for manual service commands.
+> If the desktop shortcut is not available, see [Appendix: Command-line reference](#appendix-command-line-reference) for manual service commands. 
 
 ---
 
@@ -57,7 +58,7 @@ Do not judge NTP timing accuracy in the first few minutes after a restart.
 
 **SharpCap NTP Timing Analysis tool** will estimate the accuracy from the NTP logs over the day, and provide a ** Point In Time *** estimate of offset and accuracy. You can also look at the Statistic tab in NTP server monitor to see graphs, but these are less informative.
 
-**Understanding Offset**: The offset is how far the PC time is from the NTP server time. NTP will discpline the PC clcok to try to bring this to zero, but it does not need to be zero for occultations. You just need to know what the offset value is so you can correct it in TANGRA or PyOTE. THe Offset in the "Current local NTP status" line can be used, but a better estimate including estimated accuracy can be obtained from  **SharpCap NTP Timing Analysis tool**, under the **Tools** menu in SharpCap Occulation-Manager
+**Understanding Offset**: The offset is how far the PC time is from the NTP server time. NTP will discpline the PC clock to try to bring this to zero, but it does not need to be zero for occultations. You just need to know what the offset value is so you can correct it in TANGRA or PyOTE. The Offset in the "Current local NTP status" line can be used, but a better estimate including estimated accuracy can be obtained from  **SharpCap NTP Timing Analysis tool**, under the **Tools** menu in SharpCap Occulation-Manager. This is built into the Occultation Manager report generation, and it is **HIGHLY RECOMMENDED** to use this as chances are you will screw it up if you try to do it manually for yourself. 
 
 Ideal:
 - **Delay** no more than 20 ms, with some servers < 10 ms 
