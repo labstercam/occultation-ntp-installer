@@ -597,20 +597,6 @@
       ]
     },
     {
-      "id": 43,
-      "authority": "University of Melbourne",
-      "facility": "University of Melbourne, Parkville Campus",
-      "address": "Grattan Street, Parkville VIC 3010, Australia",
-      "city": "Parkville (Melbourne), VIC",
-      "lat": -37.798,
-      "lon": 144.961,
-      "source_note": "NTP server ntp.unimelb.edu.au operated by University of Melbourne IT Services, Parkville campus. Coordinates for main campus entrance. Confidence: ±200 m.",
-      "source_urls": [
-        "https://www.unimelb.edu.au/contact",
-        "https://its.unimelb.edu.au/"
-      ]
-    },
-    {
       "id": 44,
       "authority": "Australian National University (ANU)",
       "facility": "ANU Acton Campus",
@@ -622,20 +608,6 @@
       "source_urls": [
         "https://www.anu.edu.au/about/contact-anu",
         "https://services.anu.edu.au/information-technology/wifi-computing/time-servers"
-      ]
-    },
-    {
-      "id": 45,
-      "authority": "University of Adelaide",
-      "facility": "University of Adelaide, North Terrace Campus",
-      "address": "North Terrace, Adelaide SA 5005, Australia",
-      "city": "Adelaide, SA",
-      "lat": -34.921,
-      "lon": 138.604,
-      "source_note": "NTP server ntp.adelaide.edu.au operated by University of Adelaide IT. Main campus on North Terrace. Confidence: ±200 m.",
-      "source_urls": [
-        "https://www.adelaide.edu.au/contact/",
-        "https://www.adelaide.edu.au/technology/your-services/internet/ntp"
       ]
     },
     {

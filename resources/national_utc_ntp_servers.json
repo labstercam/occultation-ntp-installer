@@ -106,20 +106,6 @@
     {
       "country_code": "AU",
       "country_name": "Australia",
-      "authority": "University of Melbourne",
-      "ntp_servers": ["ntp.unimelb.edu.au"],
-      "status": "verified_public_hostname",
-      "source_urls": ["https://www.unimelb.edu.au/"],
-      "server_location": {
-        "city": "Parkville, Melbourne",
-        "lat": -37.798,
-        "lon": 144.961,
-        "source": "University of Melbourne, Grattan Street, Parkville"
-      }
-    },
-    {
-      "country_code": "AU",
-      "country_name": "Australia",
       "authority": "Australian National University (ANU)",
       "ntp_servers": ["ntp.anu.edu.au"],
       "status": "verified_public_hostname",
@@ -129,20 +115,6 @@
         "lat": -35.278,
         "lon": 149.119,
         "source": "ANU, Sullivans Creek Road, Acton ACT"
-      }
-    },
-    {
-      "country_code": "AU",
-      "country_name": "Australia",
-      "authority": "University of Adelaide",
-      "ntp_servers": ["ntp.adelaide.edu.au"],
-      "status": "verified_public_hostname",
-      "source_urls": ["https://www.adelaide.edu.au/"],
-      "server_location": {
-        "city": "Adelaide, SA",
-        "lat": -34.921,
-        "lon": 138.604,
-        "source": "University of Adelaide, North Terrace campus"
       }
     },
     {

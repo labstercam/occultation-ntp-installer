@@ -4,7 +4,7 @@ Guided Windows installer for Meinberg NTP + GPS/PPS timing setup used in occulta
 
 What it does:
 1. Downloads and installs Meinberg NTP
-2. Downloads and installs Meinberg NTP Time Server Monitor for Windows
+2. Downloads and installs Meinberg NTP Time Server Monitor for Windows (as Administrator, runs on Startup, configures DNS lookup and System Tray icon)
 3. Configures the NTP servers for specific countries to use their National Standard time server, and a set of good quality servers
 4. Optionally sets Windows QoS priority (DSCP 46) for NTP UDP port 123 traffic and disables WiFi power saving
 5. Assists with setting up GPS receivers for PPS and NMEA time
@@ -37,7 +37,7 @@ Behavior by Step 1 mode:
 
 ## For Most Users
 
-1. Download `install_ntp_timing_guided.cmd` from the latest release. [install_ntp_timing_guided.cmd](https://github.com/labstercam/occultation-ntp-installer/releases/download/v1.1.0/install_ntp_timing_guided.cmd)
+1. Download `install_ntp_timing_guided.cmd` from the latest release. [install_ntp_timing_guided.cmd](https://github.com/labstercam/occultation-ntp-installer/releases/download/v1.4.0/install_ntp_timing_guided.cmd)
 2. Double-click it.
 3. Accept Administrator prompt (UAC).
 4. The launcher downloads the latest `install_ntp_timing_guided.ps1` from GitHub.
@@ -111,6 +111,15 @@ Step 5 creates two Windows Policy-based QoS rules that mark NTP packets with **D
 This causes the Windows kernel network scheduler to de-queue NTP traffic ahead of best-effort traffic. On managed networks with DiffServ-aware switches and routers, the DSCP marking is also honoured by the network infrastructure. On home or SOHO networks the benefit is confined to the local Windows scheduler.
 
 Step 5 is optional and can be skipped or re-run at any time.
+
+## Australian Server Configuration
+
+For Australian users, the installer provides a comprehensive three-tier server selection:
+1. **NMI UTC(AUS) servers** - National Measurement Institute traceable time servers (requires registration and static IP)
+2. **University public NTP servers** - Australian university time servers
+3. **AU pool fallback** - Reliable au.pool.ntp.org servers (au.pool.ntp.org plus 0..4.au.pool.ntp.org)
+
+The installer guides you through selecting up to 2 NMI servers (nearest to your city/state/territory) and provides clear registration instructions. All server entries use `iburst` for faster synchronization.
 
 ## Registry Backup
 
