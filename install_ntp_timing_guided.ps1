@@ -1018,7 +1018,8 @@ function Get-JsonResourceWithFallback {
             }
 
             # Write UTF-8 without BOM to avoid ConvertFrom-Json errors
-            [System.IO.File]::WriteAllText($LocalPath, $contentText, [System.Text.Encoding]::UTF8)
+            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+            [System.IO.File]::WriteAllText($LocalPath, $contentText, $utf8NoBom)
             Write-Info ("Cached {0} locally: {1}" -f $ResourceLabel, $LocalPath)
 
             return ($contentText | ConvertFrom-Json)
