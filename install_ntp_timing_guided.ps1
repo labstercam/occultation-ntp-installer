@@ -291,14 +291,12 @@ function Convert-ToTextFromResponseContent {
         $text = [string]$Content
     }
 
-    # Strip UTF-8 BOM if present
-    $bom = [System.Text.Encoding]::UTF8.GetPreamble()
-    $bomString = [System.Text.Encoding]::UTF8.GetString($bom)
-    if ($text.StartsWith($bomString)) {
-        $text = $text.Substring($bomString.Length)
-    }
+    # Strip UTF-8 BOM character (U+FEFF) using explicit char trim
+    # .StartsWith() with a BOM string is unreliable in PowerShell 5.1 / .NET Framework 4.x
+    # and TrimStart() with no args does NOT remove U+FEFF in .NET 4.x
+    $text = $text.TrimStart([char]0xFEFF)
 
-    # Also trim any leading whitespace that could cause ConvertFrom-Json to fail 
+    # Also trim remaining leading whitespace that could cause ConvertFrom-Json to fail 
     $text = $text.TrimStart()
 
     return $text
