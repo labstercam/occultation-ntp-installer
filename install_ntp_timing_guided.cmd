@@ -3,7 +3,6 @@ setlocal
 
 set "SCRIPT_DIR=%~dp0"
 set "PS_SCRIPT=%SCRIPT_DIR%install_ntp_timing_guided.ps1"
-set "PS_SCRIPT_URL=https://raw.githubusercontent.com/labstercam/occultation-ntp-installer/main/install_ntp_timing_guided.ps1"
 set "ELEVATED_FLAG=%~1"
 set "OCNTP_REMOTE_DISABLED=0"
 
@@ -22,50 +21,20 @@ if not "%ERRORLEVEL%"=="0" (
   exit /b %ERRORLEVEL%
 )
 
-echo [INFO] Downloading latest PowerShell script from GitHub...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '%PS_SCRIPT_URL%' -OutFile '%PS_SCRIPT%' -UseBasicParsing -ErrorAction Stop"
-if not "%ERRORLEVEL%"=="0" (
+echo [INFO] Using local PowerShell script...
+if not exist "%PS_SCRIPT%" (
   echo.
-  echo [WARN] Could not download the latest PowerShell script from GitHub.
-  echo [WARN] Internet may be unavailable, or GitHub may be unreachable.
-  if not exist "%PS_SCRIPT%" (
-    echo.
-    echo [ERROR] No previously downloaded local script is available:
-    echo   %PS_SCRIPT%
-    echo.
-    echo Please check internet access and try again.
-    echo If needed, download the full installer package from:
-    echo   https://github.com/labstercam/occultation-ntp-installer
-    echo.
-    pause
-    exit /b 1
-  )
-
-  echo.
-  echo A local previously downloaded installer script was found:
+  echo [ERROR] Local PowerShell script not found:
   echo   %PS_SCRIPT%
-  choice /C YN /N /M "Continue with the local script version? [Y/N]: "
-  if errorlevel 2 (
-    echo.
-    echo [INFO] Cancelled by user.
-    exit /b 1
-  )
-  set "OCNTP_REMOTE_DISABLED=1"
-  echo [INFO] Continuing with local script version.
   echo.
-) else (
-  if not exist "%PS_SCRIPT%" (
-    echo.
-    echo [ERROR] Download appeared to succeed but script is missing:
-    echo   %PS_SCRIPT%
-    echo.
-    pause
-    exit /b 1
-  )
-  echo [OK] Downloaded install_ntp_timing_guided.ps1
+  echo Please ensure the script exists in the installer directory.
   echo.
+  pause
+  exit /b 1
 )
+
+echo [INFO] Found local script: %PS_SCRIPT%
+echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%"
 set "EXIT_CODE=%ERRORLEVEL%"
