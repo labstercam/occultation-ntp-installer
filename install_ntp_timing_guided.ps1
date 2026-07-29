@@ -1017,7 +1017,8 @@ function Get-JsonResourceWithFallback {
                 New-Item -ItemType Directory -Path $localDir -Force | Out-Null
             }
 
-            Set-Content -LiteralPath $LocalPath -Value $contentText -Encoding UTF8
+            # Write UTF-8 without BOM to avoid ConvertFrom-Json errors
+            [System.IO.File]::WriteAllText($LocalPath, $contentText, [System.Text.Encoding]::UTF8)
             Write-Info ("Cached {0} locally: {1}" -f $ResourceLabel, $LocalPath)
 
             return ($contentText | ConvertFrom-Json)

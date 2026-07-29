@@ -1,4 +1,4 @@
-﻿{
+{
   "NZ": {
     "description": "New Zealand profile with MSL Stratum 1 national standard pool plus InternetNZ ntp.net.nz city servers; apply MSL and InternetNZ usage policies",
     "servers": [
