@@ -297,7 +297,7 @@ function Convert-ToTextFromResponseContent {
         $text = $text.Substring($bomString.Length)
     }
 
-    # Also trim any leading whitespace that could cause ConvertFrom-Json to fail
+    # Also trim any leading whitespace that could cause ConvertFrom-Json to fail 
     $text = $text.TrimStart()
 
     return $text
