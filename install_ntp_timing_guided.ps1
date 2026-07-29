@@ -279,15 +279,25 @@ function Resolve-WorkingTempDirectory {
 function Convert-ToTextFromResponseContent {
     param([object]$Content)
 
+    $text = ""
     if ($Content -is [string]) {
-        return $Content
+        $text = $Content
+    }
+    elseif ($Content -is [System.Array]) {
+        $text = (($Content | ForEach-Object { [char]$_ }) -join '')
+    }
+    else {
+        $text = [string]$Content
     }
 
-    if ($Content -is [System.Array]) {
-        return (($Content | ForEach-Object { [char]$_ }) -join '')
+    # Strip UTF-8 BOM if present
+    $bom = [System.Text.Encoding]::UTF8.GetPreamble()
+    $bomString = [System.Text.Encoding]::UTF8.GetString($bom)
+    if ($text.StartsWith($bomString)) {
+        $text = $text.Substring($bomString.Length)
     }
 
-    return [string]$Content
+    return $text
 }
 
 function Get-ExpectedSha256FromUrl {
