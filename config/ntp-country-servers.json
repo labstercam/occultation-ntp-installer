@@ -59,5 +59,22 @@
       "1.us.pool.ntp.org iburst",
       "2.us.pool.ntp.org iburst"
     ]
+  },
+  "MT": {
+    "description": "Malta profile using Italy's national standards servers (INRiM) plus Italy NTP pool servers. Malta does not have its own NTP pool; Italy provides geographically proximate, reliable time sources.",
+    "notes": [
+      "Italy's INRiM servers are national standards traceable to UTC(IT).",
+      "Italy NTP pool servers provide redundancy and diversity.",
+      "All servers are accessible from Malta and provide low-latency time synchronization.",
+      "Malta does not have mt.pool.ntp.org; this configuration uses proven Italy infrastructure."
+    ],
+    "servers": [
+      "ntp1.inrim.it iburst",
+      "ntp2.inrim.it iburst", 
+      "0.it.pool.ntp.org iburst",
+      "1.it.pool.ntp.org iburst",
+      "2.it.pool.ntp.org iburst",
+      "3.it.pool.ntp.org iburst"
+    ]
   }
 }
